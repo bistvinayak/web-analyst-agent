@@ -1,0 +1,505 @@
+<title>Web Analyst Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eef2f4;
+    --panel: #fafbfc;
+    --ink: #0f1d26;
+    --muted: #52646f;
+    --edge: #3a4f5b;
+    --line: #d3dce1;
+    --line-strong: #9fb0ba;
+    --accent: #0a6e68;
+    --accent-soft: #d7eeeb;
+    --on-accent: #ffffff;
+    --warn: #b4400e;
+    --warn-soft: #f9e4d8;
+    --code-bg: #e3eaee;
+    --display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+    --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0c161d; --panel: #122029; --ink: #dce7ee; --muted: #93a8b4; --edge: #8fa6b3;
+      --line: #21343f; --line-strong: #3b5665; --accent: #4cc9bc; --accent-soft: #123a3a;
+      --on-accent: #062321; --warn: #f0985f; --warn-soft: #3a2416; --code-bg: #0a121a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c161d; --panel: #122029; --ink: #dce7ee; --muted: #93a8b4; --edge: #8fa6b3;
+    --line: #21343f; --line-strong: #3b5665; --accent: #4cc9bc; --accent-soft: #123a3a;
+    --on-accent: #062321; --warn: #f0985f; --warn-soft: #3a2416; --code-bg: #0a121a;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.62 var(--body); }
+  .page { max-width: 1160px; margin: 0 auto; padding-inline: 20px; padding-block: 44px 80px; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  p { margin: 0; }
+
+  /* header */
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 28px 56px; align-items: end; padding-bottom: 28px; border-bottom: 1px solid var(--line-strong); }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  h1 { font: 700 clamp(2rem, 4.4vw, 3.1rem)/1.05 var(--display); letter-spacing: -.02em; margin: 0 0 14px; text-wrap: balance; }
+  .lede { max-width: 62ch; color: var(--muted); font-size: 1.06rem; }
+  .facts { margin: 0; display: grid; gap: 8px; font: 400 13px/1.4 var(--mono); }
+  .facts div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 22px; padding-block: 16px 0; font: 500 12.5px/1.2 var(--mono); }
+  .toc a { text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  @media (max-width: 820px) { .head { grid-template-columns: minmax(0, 1fr); } }
+
+  main { display: grid; gap: 64px; padding-top: 44px; }
+  section { display: grid; gap: 18px; scroll-margin-top: 20px; }
+  h2 { font: 700 1.65rem/1.15 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+  h3 { font: 700 1.05rem/1.2 var(--display); margin: 10px 0 0; }
+  .prose { max-width: 68ch; display: grid; gap: 12px; }
+
+  /* figures */
+  figure { margin: 0; display: grid; gap: 10px; }
+  .fig-scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; }
+  .diagram { display: block; width: 100%; height: auto; }
+  figcaption { max-width: 78ch; color: var(--muted); font-size: .95rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 22px; font: 400 12px/1.2 var(--mono); color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--edge); }
+  .legend i.dash { border-top-style: dashed; }
+  .legend i.warn { border-top-color: var(--warn); border-top-style: dashed; }
+  .legend i.core { height: 12px; width: 16px; border: 2px solid var(--accent); background: var(--accent-soft); border-radius: 2px; }
+  .legend i.pin { width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--accent); }
+
+  /* svg parts, styled from the page so both themes resolve through tokens */
+  .region { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 3 6; }
+  .reg { font: 500 11px var(--mono); letter-spacing: .12em; fill: var(--muted); }
+  .node { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.3; }
+  .node-core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.8; }
+  .node-store { fill: var(--code-bg); stroke: var(--line-strong); stroke-width: 1.3; }
+  .node-ext { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.3; stroke-dasharray: 5 3; }
+  .node-warn { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.5; }
+  .node-note { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 4 4; }
+  .band { stroke: var(--line-strong); stroke-width: 1; fill: none; }
+  .t { font: 600 13.5px var(--mono); fill: var(--ink); }
+  .s { font: 400 11px var(--mono); fill: var(--muted); }
+  .lbl { font: 400 11px var(--mono); fill: var(--edge); }
+  .lbl-w { font: 400 11px var(--mono); fill: var(--warn); }
+  .note { font: 400 11.5px var(--mono); fill: var(--muted); }
+  .note-b { font: 600 11.5px var(--mono); fill: var(--ink); }
+  .edge { stroke: var(--edge); stroke-width: 1.6; fill: none; }
+  .edge.ret { stroke-dasharray: 5 4; }
+  .edge.w { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .mk { fill: var(--edge); }
+  .mk-w { fill: var(--warn); }
+  .step circle { fill: var(--accent); stroke: var(--panel); stroke-width: 2.5; }
+  .step text { font: 600 11px var(--mono); fill: var(--on-accent); text-anchor: middle; }
+
+  /* numbered walkthrough */
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 14px; max-width: 74ch; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 14px; }
+  ol.steps li::before { content: counter(s); width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 600 12px/26px var(--mono); text-align: center; }
+
+  /* tables */
+  .table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: .96rem; line-height: 1.5; }
+  th { text-align: left; font: 500 11.5px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 12px 16px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font-family: var(--mono); font-size: .84rem; white-space: nowrap; }
+  td.num { font-family: var(--mono); font-size: .86rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  td.dim { color: var(--muted); }
+
+  pre { margin: 0; overflow-x: auto; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; font: 400 13px/1.6 var(--mono); }
+  pre .k { color: var(--accent); }
+  pre .c { color: var(--muted); }
+
+  /* trace of a real run */
+  table.trace td:first-child { width: 120px; }
+  .badge { display: inline-block; font: 500 11.5px/1 var(--mono); padding: 4px 8px; border-radius: 3px; border: 1px solid var(--line-strong); color: var(--muted); }
+  .badge.call { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .badge.out { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .untrusted { color: var(--warn); font-weight: 600; }
+  footer { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line-strong); color: var(--muted); font: 400 12.5px/1.5 var(--mono); }
+</style>
+
+<div class="page">
+  <header>
+    <div class="head">
+      <div>
+        <div class="eyebrow">Architecture</div>
+        <h1>Web Analyst Agent</h1>
+        <p class="lede">A local web app that takes a link and an objective, picks or writes a skill for that kind of analysis, gathers evidence from the site, and returns a report where every finding cites what was observed. Models come from OpenRouter's free tier, with a second chain and a fallback API behind it.</p>
+      </div>
+      <dl class="facts">
+        <div><dt>Entry</dt><dd>app/server.py, FastAPI</dd></div>
+        <div><dt>Model API</dt><dd>OpenAI-compatible chat completions</dd></div>
+        <div><dt>State</dt><dd>files on disk, no database</dd></div>
+        <div><dt>Tests</dt><dd>93, all offline</dd></div>
+      </dl>
+    </div>
+    <nav class="toc" aria-label="Sections">
+      <a href="#path">Request path</a><a href="#loop">Agent loop</a><a href="#modules">Modules</a><a href="#failover">Failover</a><a href="#trust">Trust</a><a href="#skills">Skills</a><a href="#run">A real run</a><a href="#limits">Limits</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="path">
+      <h2>How a request travels</h2>
+      <p class="prose">One run crosses six components, and the only two places it leaves your machine are the model providers and the site being analyzed. The numbered markers on the figure match the steps below it.</p>
+      <figure>
+        <div class="fig-scroll">
+          <svg class="diagram" style="min-width: 900px" viewBox="0 0 1240 620" role="img" aria-label="Request path: the browser posts a run to server.py, which starts it in runs.py, which drives the agent loop in agent.py. The agent calls llm.py to reach model providers outside the machine and tools.py to read skills from disk and fetch pages from the target website. Events flow back to the browser.">
+            <defs>
+              <marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+              <marker id="ahw1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk-w" d="M0,0 L10,5 L0,10 z"/></marker>
+            </defs>
+
+            <rect class="region" x="8" y="44" width="920" height="568" rx="6"/>
+            <text class="reg" x="24" y="68">YOUR MACHINE</text>
+            <rect class="region" x="990" y="44" width="242" height="568" rx="6"/>
+            <text class="reg" x="1006" y="68">OUTSIDE</text>
+
+            <!-- top row -->
+            <rect class="node" x="24" y="110" width="110" height="60" rx="4"/>
+            <text class="t" x="79" y="137" text-anchor="middle">Browser</text><text class="s" x="79" y="155" text-anchor="middle">index.html</text>
+            <rect class="node" x="214" y="110" width="110" height="60" rx="4"/>
+            <text class="t" x="269" y="137" text-anchor="middle">server.py</text><text class="s" x="269" y="155" text-anchor="middle">FastAPI</text>
+            <rect class="node" x="404" y="110" width="110" height="60" rx="4"/>
+            <text class="t" x="459" y="137" text-anchor="middle">runs.py</text><text class="s" x="459" y="155" text-anchor="middle">thread + log</text>
+            <rect class="node-core" x="594" y="110" width="110" height="60" rx="4"/>
+            <text class="t" x="649" y="137" text-anchor="middle">agent.py</text><text class="s" x="649" y="155" text-anchor="middle">the loop</text>
+            <rect class="node" x="784" y="110" width="110" height="60" rx="4"/>
+            <text class="t" x="839" y="137" text-anchor="middle">llm.py</text><text class="s" x="839" y="155" text-anchor="middle">failover</text>
+
+            <!-- top row edges: forward -->
+            <line class="edge" x1="134" y1="128" x2="214" y2="128" marker-end="url(#ah1)"/>
+            <line class="edge" x1="324" y1="128" x2="404" y2="128" marker-end="url(#ah1)"/>
+            <line class="edge" x1="514" y1="128" x2="594" y2="128" marker-end="url(#ah1)"/>
+            <line class="edge" x1="704" y1="128" x2="784" y2="128" marker-end="url(#ah1)"/>
+            <text class="lbl" x="174" y="112" text-anchor="middle">POST run</text>
+            <text class="lbl" x="364" y="112" text-anchor="middle">start</text>
+            <text class="lbl" x="554" y="112" text-anchor="middle">run_agent</text>
+            <text class="lbl" x="744" y="112" text-anchor="middle">chat()</text>
+            <!-- top row edges: return -->
+            <line class="edge ret" x1="214" y1="152" x2="134" y2="152" marker-end="url(#ah1)"/>
+            <line class="edge ret" x1="404" y1="152" x2="324" y2="152" marker-end="url(#ah1)"/>
+            <line class="edge ret" x1="594" y1="152" x2="514" y2="152" marker-end="url(#ah1)"/>
+            <line class="edge ret" x1="784" y1="152" x2="704" y2="152" marker-end="url(#ah1)"/>
+            <text class="lbl" x="174" y="173" text-anchor="middle">SSE</text>
+            <text class="lbl" x="364" y="173" text-anchor="middle">events</text>
+            <text class="lbl" x="554" y="173" text-anchor="middle">emit()</text>
+            <text class="lbl" x="744" y="173" text-anchor="middle">reply</text>
+
+            <!-- runs.py to runs/ -->
+            <line class="edge" x1="459" y1="170" x2="459" y2="236" marker-end="url(#ah1)"/>
+            <text class="lbl" x="468" y="208">save</text>
+            <rect class="node-store" x="394" y="236" width="130" height="48" rx="4"/>
+            <line class="band" x1="394" y1="245" x2="524" y2="245"/>
+            <text class="t" x="459" y="264" text-anchor="middle">runs/</text><text class="s" x="459" y="278" text-anchor="middle">events, report</text>
+
+            <!-- agent to tools -->
+            <line class="edge" x1="624" y1="170" x2="624" y2="300" marker-end="url(#ah1)"/>
+            <line class="edge ret" x1="674" y1="300" x2="674" y2="170" marker-end="url(#ah1)"/>
+            <text class="lbl" x="614" y="248" text-anchor="end">run_tool()</text>
+            <text class="lbl" x="684" y="248">result</text>
+            <rect class="node" x="594" y="300" width="110" height="60" rx="4"/>
+            <text class="t" x="649" y="327" text-anchor="middle">tools.py</text><text class="s" x="649" y="345" text-anchor="middle">5 tools</text>
+
+            <!-- tools to skills.py and webfetch.py -->
+            <path class="edge" d="M630,360 V410 H435 V460" marker-end="url(#ah1)"/>
+            <path class="edge" d="M668,360 V410 H800 V460" marker-end="url(#ah1)"/>
+            <text class="lbl" x="533" y="402" text-anchor="middle">load / save skill</text>
+            <text class="lbl" x="734" y="402" text-anchor="middle">fetch, query</text>
+            <rect class="node" x="380" y="460" width="110" height="60" rx="4"/>
+            <text class="t" x="435" y="487" text-anchor="middle">skills.py</text><text class="s" x="435" y="505" text-anchor="middle">library</text>
+            <rect class="node-warn" x="740" y="460" width="120" height="60" rx="4"/>
+            <text class="t" x="800" y="487" text-anchor="middle">webfetch.py</text><text class="s" x="800" y="505" text-anchor="middle">safe HTTP</text>
+
+            <!-- skills stores -->
+            <line class="edge" x1="435" y1="520" x2="435" y2="552" marker-end="url(#ah1)"/>
+            <text class="lbl" x="444" y="541">read, write</text>
+            <rect class="node-store" x="370" y="552" width="130" height="48" rx="4"/>
+            <line class="band" x1="370" y1="561" x2="500" y2="561"/>
+            <text class="t" x="435" y="580" text-anchor="middle">skills/</text><text class="s" x="435" y="594" text-anchor="middle">SKILL.md files</text>
+            <rect class="node-store" x="190" y="552" width="130" height="48" rx="4"/>
+            <line class="band" x1="190" y1="561" x2="320" y2="561"/>
+            <text class="t" x="255" y="580" text-anchor="middle">seed_skills/</text><text class="s" x="255" y="594" text-anchor="middle">19 starters</text>
+            <line class="edge" x1="320" y1="576" x2="370" y2="576" marker-end="url(#ah1)"/>
+            <text class="lbl" x="345" y="568" text-anchor="middle">copy</text>
+
+            <!-- webfetch guard note + target -->
+            <text class="lbl-w" x="800" y="548" text-anchor="middle">checks every URL and redirect</text>
+            <text class="lbl-w" x="800" y="564" text-anchor="middle">size, redirect, fetch caps</text>
+            <text class="lbl-w" x="800" y="580" text-anchor="middle">honors robots.txt</text>
+            <line class="edge" x1="860" y1="478" x2="1020" y2="478" marker-end="url(#ah1)"/>
+            <line class="edge w" x1="1020" y1="500" x2="860" y2="500" marker-end="url(#ahw1)"/>
+            <text class="lbl" x="959" y="470" text-anchor="middle">GET</text>
+            <text class="lbl-w" x="959" y="518" text-anchor="middle">HTML</text>
+            <rect class="node-ext" x="1020" y="458" width="196" height="60" rx="4"/>
+            <text class="t" x="1118" y="485" text-anchor="middle">Target website</text><text class="s" x="1118" y="503" text-anchor="middle">any public http(s) URL</text>
+            <text class="lbl-w" x="1006" y="558">Page content is data,</text>
+            <text class="lbl-w" x="1006" y="574">never instructions.</text>
+
+            <!-- model providers -->
+            <line class="edge" x1="894" y1="128" x2="1006" y2="128" marker-end="url(#ah1)"/>
+            <line class="edge ret" x1="1006" y1="152" x2="894" y2="152" marker-end="url(#ah1)"/>
+            <text class="lbl" x="959" y="112" text-anchor="middle">HTTPS</text>
+            <text class="lbl" x="959" y="173" text-anchor="middle">JSON</text>
+            <path class="edge" d="M1020,108 H1006 V224 H1020"/>
+            <rect class="node-ext" x="1020" y="84" width="196" height="48" rx="4"/>
+            <text class="t" x="1118" y="105" text-anchor="middle">OpenRouter chain 1</text><text class="s" x="1118" y="122" text-anchor="middle">3 free models</text>
+            <rect class="node-ext" x="1020" y="142" width="196" height="48" rx="4"/>
+            <text class="t" x="1118" y="163" text-anchor="middle">OpenRouter chain 2</text><text class="s" x="1118" y="180" text-anchor="middle">next 3, same key</text>
+            <rect class="node-ext" x="1020" y="200" width="196" height="48" rx="4"/>
+            <text class="t" x="1118" y="221" text-anchor="middle">Fallback API</text><text class="s" x="1118" y="238" text-anchor="middle">any OpenAI-compatible</text>
+            <text class="note" x="1020" y="274">Tried in order:</text>
+            <text class="note" x="1020" y="291">chain 1, chain 2, fallback.</text>
+
+            <!-- step markers -->
+            <g class="step"><circle cx="174" cy="128" r="10"/><text x="174" y="132">1</text></g>
+            <g class="step"><circle cx="364" cy="128" r="10"/><text x="364" y="132">2</text></g>
+            <g class="step"><circle cx="649" cy="110" r="10"/><text x="649" y="114">3</text></g>
+            <g class="step"><circle cx="744" cy="128" r="10"/><text x="744" y="132">4</text></g>
+            <g class="step"><circle cx="624" cy="200" r="10"/><text x="624" y="204">5</text></g>
+            <g class="step"><circle cx="554" cy="152" r="10"/><text x="554" y="156">6</text></g>
+          </svg>
+        </div>
+        <div class="legend" aria-hidden="true">
+          <span><i></i>request</span><span><i class="dash"></i>response or event</span><span><i class="warn"></i>untrusted data</span><span><i class="core"></i>the loop</span><span><i class="pin"></i>step below</span>
+        </div>
+        <figcaption>config.py (limits and keys) and prompts.py (the system prompt) are read by the agent and left out of the picture. seed_skills/ is copied into skills/ at startup, only for skills that are missing.</figcaption>
+      </figure>
+      <ol class="steps">
+        <li><p>You submit a link and an objective. <code>index.html</code> posts them to <code>/api/runs</code>. <code>server.py</code> checks the URL shape and lengths, and refuses if two runs are already active.</p></li>
+        <li><p><code>runs.py</code> creates a run with a random id, starts a thread, and returns the id. The page opens <code>/api/runs/{id}/events</code>, a server-sent event stream that replays the run's log from event 0, so reloading the page or opening a second tab still works.</p></li>
+        <li><p><code>agent.py</code> builds the first messages: the system prompt, the target, the objective, and a catalog with one line per skill. If you picked skills in the form, their full text is placed in this message too, so the model does not spend requests loading them.</p></li>
+        <li><p>Each turn, <code>llm.py</code> sends the messages and the tool schemas to OpenRouter chain 1, then chain 2, then the fallback API. The first success returns text, optional reasoning, and tool calls.</p></li>
+        <li><p>Tool calls go to <code>tools.py</code>. Skill calls read or write <code>skills/</code>. Fetches go through <code>webfetch.py</code>, which validates the URL, follows redirects one hop at a time, and returns a structured summary that is marked as untrusted.</p></li>
+        <li><p>Every step becomes an event. The model's first reply with no tool call is the report. <code>runs.py</code> then saves the events, metadata and report under <code>runs/&lt;id&gt;/</code>.</p></li>
+      </ol>
+    </section>
+
+    <section id="loop">
+      <h2>The agent loop</h2>
+      <p class="prose">One pass through the loop is one model request. The loop ends when the model answers without calling a tool, or when the turn cap is reached. A few guards keep weaker free models honest.</p>
+      <figure>
+        <div class="fig-scroll">
+          <svg class="diagram" style="min-width: 820px" viewBox="0 0 1000 410" role="img" aria-label="Agent loop: build messages, trim history, call the model. If the model made tool calls, run them and loop back to trim history. If not, check whether a page has been fetched. If yes, that reply is the report. If no, nudge the model once, then stop with an error.">
+            <defs>
+              <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+            </defs>
+            <rect class="node" x="16" y="120" width="150" height="60" rx="4"/>
+            <text class="t" x="91" y="147" text-anchor="middle">Build messages</text><text class="s" x="91" y="165" text-anchor="middle">prompt, task, skills</text>
+            <rect class="node" x="200" y="120" width="110" height="60" rx="4"/>
+            <text class="t" x="255" y="147" text-anchor="middle">Trim history</text><text class="s" x="255" y="165" text-anchor="middle">old results</text>
+            <rect class="node-core" x="344" y="120" width="110" height="60" rx="4"/>
+            <text class="t" x="399" y="147" text-anchor="middle">llm.chat()</text><text class="s" x="399" y="165" text-anchor="middle">one request</text>
+            <polygon class="node" points="486,150 550,110 614,150 550,190"/>
+            <text class="t" x="550" y="154" text-anchor="middle" style="font-size:12px">Tool calls?</text>
+            <polygon class="node" points="686,150 750,110 814,150 750,190"/>
+            <text class="t" x="750" y="154" text-anchor="middle" style="font-size:12px">Fetched yet?</text>
+            <rect class="node-core" x="850" y="120" width="110" height="60" rx="4"/>
+            <text class="t" x="905" y="147" text-anchor="middle">Report</text><text class="s" x="905" y="165" text-anchor="middle">final reply</text>
+            <rect class="node" x="470" y="250" width="160" height="60" rx="4"/>
+            <text class="t" x="550" y="277" text-anchor="middle">Run tools</text><text class="s" x="550" y="295" text-anchor="middle">append results</text>
+            <rect class="node" x="670" y="20" width="160" height="46" rx="4"/>
+            <text class="t" x="750" y="40" text-anchor="middle">Nudge</text><text class="s" x="750" y="56" text-anchor="middle">ask for a fetch</text>
+
+            <line class="edge" x1="166" y1="150" x2="200" y2="150" marker-end="url(#ah2)"/>
+            <line class="edge" x1="310" y1="150" x2="344" y2="150" marker-end="url(#ah2)"/>
+            <line class="edge" x1="454" y1="150" x2="486" y2="150" marker-end="url(#ah2)"/>
+            <line class="edge" x1="614" y1="150" x2="686" y2="150" marker-end="url(#ah2)"/>
+            <line class="edge" x1="814" y1="150" x2="850" y2="150" marker-end="url(#ah2)"/>
+            <line class="edge" x1="550" y1="190" x2="550" y2="250" marker-end="url(#ah2)"/>
+            <line class="edge" x1="750" y1="110" x2="750" y2="66" marker-end="url(#ah2)"/>
+            <path class="edge" d="M470,280 H255 V180" marker-end="url(#ah2)"/>
+            <path class="edge" d="M670,43 H399 V120" marker-end="url(#ah2)"/>
+            <text class="lbl" x="650" y="140" text-anchor="middle">no</text>
+            <text class="lbl" x="832" y="140" text-anchor="middle">yes</text>
+            <text class="lbl" x="558" y="224">yes</text>
+            <text class="lbl" x="758" y="94">no</text>
+            <text class="lbl" x="362" y="272" text-anchor="middle">next turn</text>
+            <text class="lbl" x="535" y="36" text-anchor="middle">once, then error</text>
+
+            <text class="note-b" x="16" y="344">Inside Run tools</text>
+            <text class="note" x="16" y="362">the 3rd identical call is refused</text>
+            <text class="note" x="16" y="379">malformed arguments go back as errors</text>
+            <text class="note" x="16" y="396">fetches stop at 25 per run</text>
+            <rect class="node-note" x="470" y="336" width="490" height="56" rx="4"/>
+            <text class="note" x="486" y="360">Last allowed turn: tool_choice is set to none and a</text>
+            <text class="note" x="486" y="378">wrap-up note is appended, so the reply must be the report.</text>
+          </svg>
+        </div>
+        <figcaption>The default turn cap is 15, and the cost of a run is roughly one model request per turn. Old tool results are shortened once the conversation passes 100,000 characters, except skill files and the four newest results, so small-context free models keep working.</figcaption>
+      </figure>
+    </section>
+
+    <section id="modules">
+      <h2>Modules</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File</th><th>Job</th><th>Talks to</th></tr></thead>
+          <tbody>
+            <tr><td>static/index.html</td><td>The whole UI. Starts runs, follows the event stream, renders the report with an escaping markdown renderer, lists skills and past runs.</td><td class="dim">server.py over HTTP and SSE</td></tr>
+            <tr><td>server.py</td><td>FastAPI routes for runs, events and skills. Validates input, accepts only localhost Host headers, installs the seed skills at startup.</td><td class="dim">runs.py, skills.py</td></tr>
+            <tr><td>runs.py</td><td>Runs the agent on a background thread and keeps a numbered event log that any number of viewers can replay. Caps concurrent runs, saves finished runs.</td><td class="dim">agent.py, runs/</td></tr>
+            <tr><td>agent.py</td><td>The loop and its guards: evidence check, repeat-call block, argument errors, history trimming, forced final report.</td><td class="dim">llm.py, tools.py, prompts.py</td></tr>
+            <tr><td>llm.py</td><td>Provider-neutral chat client. Model chains, retries, failover, live discovery of free tool-capable models, cleanup of leaked reasoning text.</td><td class="dim">OpenRouter, fallback API</td></tr>
+            <tr><td>tools.py</td><td>The five tool schemas and their dispatcher. Turns expected failures into error results the model can read and recover from.</td><td class="dim">skills.py, webfetch.py</td></tr>
+            <tr><td>skills.py</td><td>The skill library: name and size validation, atomic writes, versioning with history, seed installation.</td><td class="dim">skills/, seed_skills/</td></tr>
+            <tr><td>webfetch.py</td><td>The only outbound HTTP made for the agent, plus the HTML summarizer and the CSS selector query.</td><td class="dim">target websites</td></tr>
+            <tr><td>prompts.py</td><td>The system prompt: workflow, how to write skills, analysis rules, report format.</td><td class="dim">agent.py</td></tr>
+            <tr><td>config.py</td><td>Reads <code>.env</code> and holds every limit in one place.</td><td class="dim">everything</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="failover">
+      <h2>Failover in llm.py</h2>
+      <p class="prose">Endpoints are tried in order: OpenRouter chain 1, OpenRouter chain 2, then the fallback API. OpenRouter accepts at most three models per request, so the model list is split into two chains of three on the same key. The conversation uses plain OpenAI message format, so a run can change provider halfway through without any translation.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What comes back</th><th>What the client does</th></tr></thead>
+          <tbody>
+            <tr><td>200 with text or tool calls</td><td>Returns it, after removing any leaked think and tool_call markup.</td></tr>
+            <tr><td>429 with a short Retry-After</td><td>Waits that long (at most 20 seconds), then retries, up to twice.</td></tr>
+            <tr><td>429 naming a daily quota</td><td>Skips the retries and moves on. Any other chain on the same key is skipped too, since it shares the quota.</td></tr>
+            <tr><td>5xx, timeout, network error</td><td>Retries after 2 seconds, then 4, then moves to the next endpoint.</td></tr>
+            <tr><td>200 with an error body and no choices</td><td>Treated like a 5xx or a 4xx, depending on the code inside the body.</td></tr>
+            <tr><td>400, 401, 403, 404</td><td>No retry. Moves to the next endpoint at once, since another provider may accept the request.</td></tr>
+            <tr><td>Every endpoint failed</td><td>Raises one error that lists each reason without any key. The run ends with that message in the UI.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="trust">
+      <h2>Where trust changes</h2>
+      <p class="prose">Anything a website says, and anything the model writes, is treated as input to be checked. The orange parts of the first figure are the places that matter most.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Input</th><th>Control</th></tr></thead>
+          <tbody>
+            <tr><td>URL from the user or the model</td><td>http and https only, no embedded credentials. The host is resolved and refused if any address is private, loopback or link-local. Every redirect is re-checked, with at most 5. Bodies stop at 2 MB, requests at 15 seconds, runs at 25 fetches. robots.txt is honored.</td></tr>
+            <tr><td>Page content going to the model</td><td>Results are a structured summary, not raw HTML, and carry a note that the content is data. The system prompt tells the model to report injection attempts and not follow them.</td></tr>
+            <tr><td>Skills written by the model</td><td>The name must be a lowercase slug of at most 48 characters. Bodies are capped at 20,000 characters. Writes stay inside <code>skills/</code>, overwriting needs an explicit flag, and the old version is archived.</td></tr>
+            <tr><td>Report shown in the browser</td><td>Escaped before any markup is added. Only http and https links are rendered. Event text is inserted with textContent.</td></tr>
+            <tr><td>Requests to the server</td><td>Localhost Host headers only, JSON bodies only, no CORS headers, so other websites cannot start runs from your browser.</td></tr>
+            <tr><td>API keys</td><td>Kept in <code>.env</code>, which is gitignored. Errors and events never include them.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="prose"><span class="untrusted">Known gap:</span> DNS is checked once for validation and the HTTP client resolves the name again when it connects, so DNS rebinding is not fully closed. Run the app somewhere with no route to internal systems if that matters to you.</p>
+    </section>
+
+    <section id="skills">
+      <h2>Skills</h2>
+      <div class="split">
+        <div class="prose">
+          <p>A skill is a Markdown playbook, one folder each. The agent never executes anything it writes, so there is no sandbox to build or trust.</p>
+          <h3>Life cycle</h3>
+          <p><strong>Installed.</strong> At startup, any folder in <code>seed_skills/</code> that is missing from <code>skills/</code> is copied in. Existing folders are never touched.</p>
+          <p><strong>Used.</strong> The first message carries one line per skill, the name and description. When the model picks one, <code>load_skill</code> returns the full body. If you choose skills in the form (up to 5), their bodies are inlined instead, and you can switch off skill writing for the run.</p>
+          <p><strong>Created.</strong> When nothing fits, the model writes a new skill with <code>save_skill</code> before it starts the analysis.</p>
+          <p><strong>Improved.</strong> Saving over an existing name raises the version and archives the previous text in <code>.history/</code>.</p>
+        </div>
+        <pre><span class="c"># skills/seo-onpage-audit/SKILL.md</span>
+---
+<span class="k">name:</span> seo-onpage-audit
+<span class="k">description:</span> Audit on-page SEO of one or a few
+  pages: title, meta description, headings...
+<span class="k">version:</span> 1
+<span class="k">updated:</span> 2026-09-20T00:00:00+00:00
+---
+# On-page SEO audit
+
+## When to use
+## Steps          <span class="c">names the tools to call</span>
+## Checks         <span class="c">with severity</span>
+## Report
+## Pitfalls       <span class="c">what these tools cannot see</span></pre>
+      </div>
+    </section>
+
+    <section id="run">
+      <h2>A real run</h2>
+      <p class="prose">This is the event log of an actual run against <code>example.com</code> with the objective "quick on-page SEO audit". It took 3 turns and 1 fetch on one free model, and used 9,939 input and 2,255 output tokens.</p>
+      <div class="table-wrap">
+        <table class="trace">
+          <thead><tr><th>Event</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge">llm</span></td><td>Using inclusionai/ling-3.0-flash-vl:free via openrouter</td></tr>
+            <tr><td><span class="badge call">tool_call</span></td><td><code>load_skill {"name": "seo-onpage-audit"}</code>, a seeded skill matched the objective</td></tr>
+            <tr><td><span class="badge">tool_result</span></td><td>The skill text, including its checklist and severity rules</td></tr>
+            <tr><td><span class="badge call">tool_call</span></td><td><code>fetch_page {"url": "https://example.com"}</code></td></tr>
+            <tr><td><span class="badge">tool_result</span></td><td>Structured summary: status, headers, title, headings, links, word count. Marked as untrusted.</td></tr>
+            <tr><td><span class="badge out">report</span></td><td>A check table quoting the observed values (<code>meta_description: null</code>, <code>word_count: 21</code>) and fixes ordered by impact</td></tr>
+            <tr><td><span class="badge">done</span></td><td>3 turns, 1 fetch, saved to <code>runs/&lt;id&gt;/</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>Limits and budgets</h2>
+      <p class="prose">All of these live in <code>config.py</code> and can be changed with environment variables.</p>
+      <div class="split">
+        <div class="table-wrap">
+          <table style="min-width: 0">
+            <thead><tr><th>Agent</th><th class="num">Default</th></tr></thead>
+            <tbody>
+              <tr><td>Turns per run</td><td class="num">15</td></tr>
+              <tr><td>Output tokens per reply</td><td class="num">4,096</td></tr>
+              <tr><td>Concurrent runs</td><td class="num">2</td></tr>
+              <tr><td>History before trimming</td><td class="num">100,000 chars</td></tr>
+              <tr><td>Report length cap</td><td class="num">30,000 chars</td></tr>
+              <tr><td>Model timeout</td><td class="num">90 s</td></tr>
+              <tr><td>Retries per endpoint</td><td class="num">2</td></tr>
+              <tr><td>Models per OpenRouter request</td><td class="num">3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table style="min-width: 0">
+            <thead><tr><th>Web access and skills</th><th class="num">Default</th></tr></thead>
+            <tbody>
+              <tr><td>Fetches per run</td><td class="num">25</td></tr>
+              <tr><td>Fetch timeout</td><td class="num">15 s</td></tr>
+              <tr><td>Response body</td><td class="num">2,000,000 bytes</td></tr>
+              <tr><td>Redirects followed</td><td class="num">5</td></tr>
+              <tr><td>Tool result to the model</td><td class="num">12,000 chars</td></tr>
+              <tr><td>Skill body</td><td class="num">20,000 chars</td></tr>
+              <tr><td>Skill description</td><td class="num">300 chars</td></tr>
+              <tr><td>Skill name</td><td class="num">48 chars</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <h3>What it cannot see</h3>
+      <p class="prose">The tools read server-delivered HTML and headers. They do not run JavaScript, so content drawn by scripts, real load timing, and logged-in pages are out of reach. The skills say this in their pitfalls, and the report is told to state it. The app has no login and keeps runs in one process, so it is built for one person on one machine.</p>
+    </section>
+  </main>
+
+  <footer>
+    <pre>web-analyst-agent/
+  app/            agent.py  config.py  llm.py  prompts.py  runs.py
+                  server.py  skills.py  tools.py  webfetch.py  static/index.html
+  seed_skills/    19 starter skills, tracked in git
+  skills/         the live library, gitignored
+  runs/           events.jsonl, meta.json, report.md for each run
+  tests/          93 tests: fake model, mock HTTP, local test site
+  .env            keys, gitignored</pre>
+  </footer>
+</div>

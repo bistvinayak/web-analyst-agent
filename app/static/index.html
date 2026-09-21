@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Analyst</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eef2f4; --panel: #fafbfc; --ink: #0f1d26; --muted: #52646f; --edge: #3a4f5b;
+    --line: #d3dce1; --line-strong: #9fb0ba; --accent: #0a6e68; --accent-soft: #d7eeeb; --on-accent: #ffffff;
+    --warn: #b4400e; --warn-soft: #f9e4d8; --code-bg: #e3eaee; --field: #ffffff;
+    --display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+    --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0c161d; --panel: #122029; --ink: #dce7ee; --muted: #93a8b4; --edge: #8fa6b3;
+      --line: #21343f; --line-strong: #3b5665; --accent: #4cc9bc; --accent-soft: #123a3a; --on-accent: #062321;
+      --warn: #f0985f; --warn-soft: #3a2416; --code-bg: #0a121a; --field: #0d1a22;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c161d; --panel: #122029; --ink: #dce7ee; --muted: #93a8b4; --edge: #8fa6b3;
+    --line: #21343f; --line-strong: #3b5665; --accent: #4cc9bc; --accent-soft: #123a3a; --on-accent: #062321;
+    --warn: #f0985f; --warn-soft: #3a2416; --code-bg: #0a121a; --field: #0d1a22;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 72px; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--line-strong); }
+  .top h1 { font-size: 1.9rem; letter-spacing: -.02em; line-height: 1.1; }
+  .top p { margin: 4px 0 0; color: var(--muted); }
+  .top nav { font: 500 12.5px var(--mono); display: flex; gap: 18px; }
+  .top nav a { text-decoration: none; } .top nav a:hover { text-decoration: underline; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 32px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .stack { display: grid; gap: 20px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+  .label-sm { font: 500 11.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+  /* form */
+  form { display: grid; gap: 18px; }
+  .field { display: grid; gap: 6px; }
+  label.lbl, legend { font: 600 13px var(--display); letter-spacing: .01em; padding: 0; }
+  input[type=text], textarea { width: 100%; font: 400 15px/1.45 var(--body); color: var(--ink); background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; padding: 10px 12px; }
+  #url { font-family: var(--mono); font-size: 14px; }
+  textarea { min-height: 84px; resize: vertical; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  .examples .label-sm { margin-right: 4px; }
+  button { font: 500 13.5px var(--display); cursor: pointer; color: var(--ink); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 14px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; font-size: 14.5px; padding: 10px 22px; }
+  button.chip { font: 400 12px var(--mono); padding: 5px 10px; border-radius: 99px; }
+  button.link { border: 0; background: none; color: var(--accent); padding: 2px 4px; font: 500 12px var(--mono); }
+  button.link:hover:not(:disabled) { text-decoration: underline; }
+
+  fieldset.skills { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; min-width: 0; }
+  .seg { display: inline-grid; grid-auto-flow: column; justify-self: start; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; background: var(--field); }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .seg span { display: block; padding: 8px 16px; font: 500 13.5px var(--display); }
+  .seg label + label span { border-left: 1px solid var(--line-strong); }
+  .seg input:checked + span { background: var(--accent); color: var(--on-accent); }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .hint { color: var(--muted); font-size: 14px; }
+  .picker { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--bg); }
+  .picker-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .picker-head input { flex: 1 1 200px; width: auto; padding: 8px 11px; font-size: 14px; }
+  .count { font: 500 12px var(--mono); color: var(--muted); }
+  .picked { display: flex; flex-wrap: wrap; gap: 6px; }
+  .picked .pk { display: inline-flex; align-items: center; gap: 4px; font: 500 12px var(--mono); background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 99px; padding: 3px 4px 3px 10px; }
+  .picked .pk button { border: 0; background: none; color: inherit; padding: 0 5px; font-size: 14px; line-height: 1; }
+  .opts-scroll { max-height: 360px; overflow-y: auto; display: grid; gap: 14px; padding-right: 4px; }
+  .cat h3 { font: 500 11.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+  .opt { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 10px 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .opt.on { border-color: var(--accent); background: var(--accent-soft); }
+  .opt.off { opacity: .55; }
+  .opt input { margin-top: 4px; accent-color: var(--accent); width: 16px; height: 16px; }
+  .opt label { display: grid; gap: 2px; cursor: pointer; min-width: 0; }
+  .opt .nm { font: 600 12.5px var(--mono); word-break: break-word; }
+  .opt .ds { font-size: 13.5px; line-height: 1.4; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .opt.on .ds { color: var(--ink); }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; cursor: pointer; }
+  .check input { margin-top: 5px; accent-color: var(--accent); }
+  .submit { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .submit .hint { font: 400 12px var(--mono); }
+  .err { color: var(--warn); font-size: 14px; }
+
+  /* run panel */
+  .run-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+  .run-title { display: grid; gap: 4px; min-width: 0; }
+  .run-title .u { font: 600 14px var(--mono); overflow-wrap: anywhere; }
+  .run-title .o { color: var(--muted); font-size: 14.5px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--mono); padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+  .pill.running { border-color: var(--accent); color: var(--accent); }
+  .pill.done { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .pill.error { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.running .dot { animation: pulse 1.3s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .pill.running .dot { animation: none; } }
+  .stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 16px 0 6px; }
+  .stage { border-top: 3px solid var(--line-strong); padding-top: 6px; font: 500 12px var(--mono); color: var(--muted); }
+  .stage.active { border-color: var(--accent); color: var(--ink); }
+  .stage.done { border-color: var(--accent); color: var(--accent); }
+  .stage.failed { border-color: var(--warn); color: var(--warn); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chips:empty { display: none; }
+  .tag { font: 500 11.5px var(--mono); border: 1px solid var(--line-strong); border-radius: 4px; padding: 3px 8px; color: var(--muted); }
+  .tag.skill { border-color: var(--accent); color: var(--accent); }
+  .tl { display: grid; gap: 2px; margin: 14px 0 0; padding: 0; list-style: none; }
+  .row { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+  .row:first-child { border-top: 0; }
+  .kind { font: 500 11px/1.9 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .kind.skill { color: var(--accent); } .kind.fetch { color: var(--ink); } .kind.bad { color: var(--warn); }
+  .what { font: 500 13px var(--mono); overflow-wrap: anywhere; }
+  .res { color: var(--muted); font: 400 12.5px var(--mono); overflow-wrap: anywhere; margin-top: 2px; }
+  .res.bad { color: var(--warn); }
+  .say { color: var(--muted); }
+  details.think summary { cursor: pointer; color: var(--muted); font: 400 12.5px var(--mono); }
+  details.think div { white-space: pre-wrap; color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+  .banner { border: 1px solid var(--warn); background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 10px 12px; margin-top: 12px; font-size: 14.5px; }
+  .foot { margin-top: 12px; color: var(--muted); font: 400 12px var(--mono); }
+
+  /* report */
+  .rep-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .rep-head .btns { display: flex; gap: 8px; }
+  .report { max-width: 78ch; }
+  .report h1 { font-size: 1.5rem; margin: 6px 0 10px; } .report h2 { font-size: 1.2rem; margin: 26px 0 8px; } .report h3 { font-size: 1.02rem; margin: 18px 0 6px; } .report h4 { font-size: .95rem; margin: 14px 0 4px; }
+  .report p { margin: 0 0 12px; } .report ul, .report ol { margin: 0 0 12px; padding-left: 22px; } .report li { margin-bottom: 4px; }
+  .report code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .report pre { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; overflow-x: auto; }
+  .report pre code { padding: 0; background: none; }
+  .report .tw { overflow-x: auto; margin: 0 0 14px; }
+  .report table { border-collapse: collapse; font-size: 14px; min-width: 100%; }
+  .report th, .report td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .report th { background: var(--code-bg); font-family: var(--display); }
+  .report hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+
+  /* rail */
+  .rail { position: sticky; top: 20px; display: grid; gap: 12px; min-width: 0; }
+  @media (max-width: 900px) { .rail { position: static; } }
+  ul.runs { list-style: none; margin: 0; padding: 0; display: grid; }
+  ul.runs li { border-top: 1px solid var(--line); }
+  ul.runs li:first-child { border-top: 0; }
+  ul.runs button { display: grid; gap: 3px; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; padding: 10px 2px; }
+  ul.runs button:hover { background: var(--accent-soft); }
+  ul.runs .cur { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
+  ul.runs .h { font: 600 13px var(--mono); overflow-wrap: anywhere; }
+  ul.runs .m { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--muted); font: 400 11.5px var(--mono); }
+  ul.runs .ob { color: var(--muted); font: 400 13px/1.35 var(--body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .empty { color: var(--muted); font-size: 14px; }
+
+  dialog { width: min(760px, 94vw); border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); color: var(--ink); padding: 20px; }
+  dialog::backdrop { background: rgba(6, 14, 20, .55); }
+  dialog h2 { font-size: 1.2rem; }
+  dialog pre { white-space: pre-wrap; background: var(--code-bg); border: 1px solid var(--line); padding: 14px; border-radius: 6px; max-height: 56vh; overflow: auto; font: 400 12.5px/1.6 var(--mono); margin: 12px 0; }
+  dialog .btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+  button.danger { color: var(--warn); border-color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Web Analyst</h1>
+      <p>Give it a link and an objective. It gathers evidence and reports what it saw.</p>
+    </div>
+    <nav aria-label="Pages"><a href="/architecture" target="_blank" rel="noopener">How it works</a></nav>
+  </header>
+
+  <div class="layout">
+    <main class="stack">
+      <form id="form" class="panel" autocomplete="off">
+        <div class="field">
+          <label class="lbl" for="url">Website or link</label>
+          <input type="text" id="url" placeholder="https://example.com" required inputmode="url" spellcheck="false">
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="objective">Objective</label>
+          <textarea id="objective" placeholder="What do you want to know? For example: audit the on-page SEO and list the five fixes with the biggest impact." required></textarea>
+          <div class="examples" id="examples"><span class="label-sm">Try</span></div>
+        </div>
+
+        <fieldset class="skills">
+          <legend>Skills</legend>
+          <div class="seg" role="radiogroup" aria-label="How skills are chosen">
+            <label><input type="radio" name="mode" value="auto" checked><span>Let the agent choose</span></label>
+            <label><input type="radio" name="mode" value="choose"><span id="chooseLabel">Choose skills</span></label>
+          </div>
+          <p class="hint" id="modeHint">The agent reads the skill catalog, picks what fits your objective, and writes a new skill if nothing does.</p>
+          <div class="picker" id="picker" hidden>
+            <div class="picker-head">
+              <input type="text" id="filter" placeholder="Filter skills" aria-label="Filter skills">
+              <span class="count" id="pickCount" aria-live="polite"></span>
+              <button type="button" class="link" id="clearPick">Clear</button>
+            </div>
+            <div class="picked" id="picked" aria-label="Selected skills"></div>
+            <div class="opts-scroll" id="opts"></div>
+          </div>
+        </fieldset>
+
+        <label class="check"><input type="checkbox" id="writes" checked><span>Let the agent write or improve skills during this run</span></label>
+
+        <div class="submit">
+          <button class="primary" id="go" type="submit">Analyze</button>
+          <span class="hint" id="submitHint">Ctrl or Cmd + Enter to run. A run uses several model requests and up to 25 page fetches.</span>
+        </div>
+        <div class="err" id="formErr" role="alert" hidden></div>
+      </form>
+
+      <section class="panel" id="runPanel" hidden aria-label="Run progress">
+        <div class="run-head">
+          <div class="run-title"><span class="label-sm">Run</span><span class="u" id="runUrl"></span><span class="o" id="runObj"></span></div>
+          <span class="pill" id="pill" role="status"><span class="dot"></span><span id="pillText"></span></span>
+        </div>
+        <div class="stages" id="stages" aria-label="Progress stages">
+          <div class="stage" data-s="skill">Skill</div><div class="stage" data-s="evidence">Evidence</div><div class="stage" data-s="report">Report</div>
+        </div>
+        <div class="chips" id="runChips"></div>
+        <ol class="tl" id="events"></ol>
+        <div id="runErr"></div>
+        <div class="foot" id="runFoot"></div>
+      </section>
+
+      <section class="panel" id="reportPanel" hidden aria-label="Report">
+        <div class="rep-head">
+          <span class="label-sm">Report</span>
+          <div class="btns"><button type="button" id="copyMd">Copy Markdown</button><button type="button" id="dlMd">Download .md</button></div>
+        </div>
+        <div class="report" id="report"></div>
+      </section>
+    </main>
+
+    <aside class="rail" aria-label="History">
+      <section class="panel">
+        <div class="label-sm" style="margin-bottom:6px">Recent runs</div>
+        <ul class="runs" id="runs"><li class="empty">Loading</li></ul>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<dialog id="skillDialog">
+  <div class="label-sm" id="skillCat"></div>
+  <h2 id="skillTitle"></h2>
+  <pre id="skillBody"></pre>
+  <div class="btns">
+    <button id="skillDelete" type="button" class="danger">Delete skill</button>
+    <button id="skillClose" type="button">Close</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const MAX_SKILLS = 5;
+const state = { skills: [], picked: [], mode: "auto", filter: "", currentRun: null, source: null, timer: null, firstTs: 0, lastTs: 0, report: "", stage: 0, viewSkill: null };
+
+const EXAMPLES = [
+  { label: "SEO check", url: "https://example.com", objective: "Give me a quick on-page SEO audit and the five fixes with the biggest impact.", skills: ["seo-onpage-audit"] },
+  { label: "Security headers", url: "https://example.com", objective: "Review the security headers and tell me the top three fixes.", skills: ["security-headers-review"] },
+  { label: "Pricing teardown", url: "https://stripe.com/pricing", objective: "Break down this pricing page: plans, metrics, and what stands out.", skills: ["pricing-page-teardown"] },
+  { label: "Company brief", url: "https://example.com", objective: "Write a research brief on this company from its own website.", skills: [] },
+];
+
+// ---------- safe markdown: escape everything first, then add a small set of tags ----------
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  return s;
+}
+function markdown(src) {
+  const lines = src.replace(/\r/g, "").split("\n"), out = [];
+  let i = 0;
+  const isList = (l) => /^\s*([-*]|\d+\.)\s+/.test(l);
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      const buf = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+      i++; out.push("<pre><code>" + esc(buf.join("\n")) + "</code></pre>"); continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^---+$/.test(line.trim())) { out.push("<hr>"); i++; continue; }
+    if (/^\s*\|/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
+      const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const head = cells(line); i += 2; const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(cells(lines[i++]));
+      out.push('<div class="tw"><table><thead><tr>' + head.map((c) => `<th>${inline(c)}</th>`).join("") + "</tr></thead><tbody>" +
+        rows.map((r) => "<tr>" + r.map((c) => `<td>${inline(c)}</td>`).join("") + "</tr>").join("") + "</tbody></table></div>");
+      continue;
+    }
+    if (isList(line)) {
+      const tag = /^\s*\d/.test(line) ? "ol" : "ul", items = [];
+      while (i < lines.length && isList(lines[i])) items.push(inline(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, "")));
+      out.push(`<${tag}>` + items.map((t) => `<li>${t}</li>`).join("") + `</${tag}>`); continue;
+    }
+    if (!line.trim()) { i++; continue; }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*\|)/.test(lines[i]) && !isList(lines[i])) para.push(lines[i++]);
+    out.push("<p>" + inline(para.join(" ")) + "</p>");
+  }
+  return out.join("\n");
+}
+
+// ---------- DOM helper: text always goes through textContent ----------
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+const host = (u) => { try { return new URL(u).host; } catch { return u; } };
+function ago(ts) {
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago"; return Math.floor(s / 86400) + " d ago";
+}
+const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+const mmss = (s) => { s = Math.max(0, Math.round(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+
+// ---------- composer: examples ----------
+for (const ex of EXAMPLES) {
+  const b = el("button", "chip", ex.label); b.type = "button";
+  b.onclick = () => {
+    $("url").value = ex.url; $("objective").value = ex.objective;
+    const have = ex.skills.filter((n) => state.skills.some((s) => s.name === n));
+    state.picked = have; setMode(have.length ? "choose" : "auto"); renderPicker();
+  };
+  $("examples").append(b);
+}
+
+// ---------- composer: skill picker ----------
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelector(`input[name=mode][value=${mode}]`).checked = true;
+  $("picker").hidden = mode !== "choose";
+  $("modeHint").textContent = mode === "choose"
+    ? `Pick up to ${MAX_SKILLS}. Their full text goes to the agent with your objective, which also saves model requests.`
+    : "The agent reads the skill catalog, picks what fits your objective, and writes a new skill if nothing does.";
+  updateChooseLabel();
+}
+function updateChooseLabel() { $("chooseLabel").textContent = state.picked.length ? `Choose skills (${state.picked.length})` : "Choose skills"; }
+document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", () => setMode(r.value)));
+$("filter").addEventListener("input", (e) => { state.filter = e.target.value.trim().toLowerCase(); renderPicker(); });
+$("clearPick").onclick = () => { state.picked = []; renderPicker(); };
+
+function toggle(name) {
+  const i = state.picked.indexOf(name);
+  if (i >= 0) state.picked.splice(i, 1); else if (state.picked.length < MAX_SKILLS) state.picked.push(name);
+  renderPicker();
+}
+function renderPicker() {
+  updateChooseLabel();
+  $("pickCount").textContent = `${state.picked.length} of ${MAX_SKILLS} selected`;
+  const picked = $("picked"); picked.replaceChildren();
+  for (const n of state.picked) {
+    const pk = el("span", "pk", n); const x = el("button", "", "×"); x.type = "button"; x.setAttribute("aria-label", `Remove ${n}`);
+    x.onclick = () => toggle(n); pk.append(x); picked.append(pk);
+  }
+  const box = $("opts"); box.replaceChildren();
+  const full = state.picked.length >= MAX_SKILLS;
+  const shown = state.skills.filter((s) => !state.filter || (s.name + " " + s.description + " " + s.category).toLowerCase().includes(state.filter));
+  if (!shown.length) { box.append(el("p", "empty", state.skills.length ? "No skills match that filter." : "No skills yet. The agent writes one when your objective needs it.")); return; }
+  const ORDER = ["Orientation", "Search and visibility", "Conversion and content", "Technical and compliance", "Custom"];
+  const cats = [...new Set(shown.map((s) => s.category))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
+  for (const c of cats) {
+    const sec = el("div", "cat"); sec.append(el("h3", "", c));
+    const grid = el("div", "opts");
+    for (const s of shown.filter((x) => x.category === c)) {
+      const on = state.picked.includes(s.name);
+      const row = el("div", "opt" + (on ? " on" : "") + (!on && full ? " off" : ""));
+      const cb = el("input"); cb.type = "checkbox"; cb.id = "sk-" + s.name; cb.checked = on; cb.disabled = !on && full;
+      cb.onchange = () => toggle(s.name);
+      const lab = el("label"); lab.htmlFor = cb.id; lab.append(el("span", "nm", s.name), el("span", "ds", s.description));
+      const view = el("button", "link", "View"); view.type = "button"; view.onclick = () => openSkill(s.name);
+      row.append(cb, lab, view); grid.append(row);
+    }
+    sec.append(grid); box.append(sec);
+  }
+}
+async function loadSkills() {
+  try { state.skills = await (await fetch("/api/skills")).json(); } catch { state.skills = []; }
+  state.picked = state.picked.filter((n) => state.skills.some((s) => s.name === n));
+  renderPicker();
+}
+
+// ---------- skill dialog ----------
+async function openSkill(name) {
+  const r = await fetch("/api/skills/" + encodeURIComponent(name));
+  if (!r.ok) return;
+  const s = state.skills.find((x) => x.name === name) || {};
+  state.viewSkill = name;
+  $("skillCat").textContent = `${s.category || "Skill"} · v${s.version || 1}`;
+  $("skillTitle").textContent = name; $("skillBody").textContent = (await r.json()).content;
+  $("skillDialog").showModal();
+}
+$("skillClose").onclick = () => $("skillDialog").close();
+$("skillDelete").onclick = async () => {
+  if (state.viewSkill && confirm(`Delete the skill "${state.viewSkill}"? Starter skills come back on the next server start.`)) {
+    await fetch("/api/skills/" + encodeURIComponent(state.viewSkill), { method: "DELETE" });
+    $("skillDialog").close(); state.picked = state.picked.filter((n) => n !== state.viewSkill); loadSkills();
+  }
+};
+
+// ---------- run view ----------
+function setStage(n, failed) {
+  state.stage = Math.max(state.stage, n);
+  document.querySelectorAll(".stage").forEach((s, i) => {
+    s.className = "stage" + (i < state.stage ? " done" : i === state.stage ? (failed ? " failed" : " active") : "");
+  });
+}
+function setPill(kind, text) { $("pill").className = "pill " + kind; $("pillText").textContent = text; }
+function tick() {
+  if (state.currentRun && $("pill").classList.contains("running")) $("runFoot").textContent = `Elapsed ${mmss(Date.now() / 1000 - state.firstTs)}`;
+}
+
+function resetRun(run) {
+  if (state.source) state.source.close();
+  clearInterval(state.timer);
+  Object.assign(state, { currentRun: run.id, firstTs: 0, lastTs: 0, report: "", stage: 0 });
+  $("runPanel").hidden = false; $("reportPanel").hidden = true; $("report").replaceChildren();
+  $("events").replaceChildren(); $("runErr").replaceChildren(); $("runFoot").textContent = ""; $("runChips").replaceChildren();
+  $("runUrl").textContent = run.url || ""; $("runObj").textContent = run.objective || "";
+  setPill("running", "Running"); setStage(0);
+  state.timer = setInterval(tick, 1000);
+  renderRuns();
+}
+function row(kind, label, body) {
+  const li = el("li", "row"); li.append(el("span", "kind " + kind, label)); const b = el("div"); b.append(...body); li.append(b); $("events").append(li); return li;
+}
+const toolRows = {};
+function addEvent(e) {
+  if (!state.firstTs) state.firstTs = e.ts; state.lastTs = e.ts;
+  const t = e.type;
+  if (t === "skills") {
+    setStage(1);
+    for (const n of e.names) $("runChips").append(el("span", "tag skill", n));
+    if (!e.writes) $("runChips").append(el("span", "tag", "skill writing off"));
+    row("skill", "Skills", [el("div", "what", "You chose: " + e.names.join(", "))]);
+  } else if (t === "llm") {
+    row("", "Model", [el("div", "say", e.message)]);
+  } else if (t === "thinking") {
+    const d = el("details", "think"); d.append(el("summary", "", "Model reasoning"), el("div", "", e.text)); row("", "Think", [d]);
+  } else if (t === "text") {
+    row("", "Note", [el("div", "say", e.text.length > 400 ? e.text.slice(0, 400) + "..." : e.text)]);
+  } else if (t === "tool_call") {
+    const skillish = e.name === "load_skill" || e.name === "save_skill";
+    setStage(1);  // the skill step is over once the agent starts using tools
+    const arg = e.name === "save_skill" ? `${e.input.name} (${e.input.chars} chars)` :
+      e.name === "load_skill" ? e.input.name :
+      e.name === "query_page" ? `${host(e.input.url)}  ${e.input.selector}${e.input.attribute ? " @" + e.input.attribute : ""}` : e.input.url;
+    toolRows[e.id] = row(skillish ? "skill" : "fetch", skillish ? (e.name === "save_skill" ? "Write" : "Load") : (e.name === "query_page" ? "Query" : "Fetch"), [el("div", "what", arg || "")]);
+  } else if (t === "tool_result") {
+    const r = toolRows[e.id];
+    if (r) { r.lastChild.append(el("div", "res" + (e.ok ? "" : " bad"), (e.ok ? "" : "failed: ") + e.preview.slice(0, 220))); if (!e.ok) r.firstChild.classList.add("bad"); }
+  } else if (t === "skill_saved") {
+    row("skill", "Saved", [el("div", "what", `${e.name}, version ${e.version}`)]); loadSkills();
+  } else if (t === "report") {
+    setStage(2); state.report = e.markdown; $("report").innerHTML = markdown(e.markdown); $("reportPanel").hidden = false;
+  } else if (t === "error") {
+    $("runErr").append(el("div", "banner", e.message)); setStage(state.stage, true);
+  } else if (t === "done") {
+    const u = e.usage || {}, ok = e.status === "done";
+    if (ok) { state.stage = 3; setStage(3); }
+    setPill(ok ? "done" : "error", ok ? "Done" : "Failed");
+    const models = (u.models || []).length ? ` · ${u.models.join(", ")}` : "";
+    $("runFoot").textContent = `${mmss(state.lastTs - state.firstTs)} · ${u.turns || 0} model ${u.turns === 1 ? "request" : "requests"} · ${u.fetches || 0} ${u.fetches === 1 ? "fetch" : "fetches"} · ${fmt((u.input || 0) + (u.output || 0))} tokens${models}`;
+    clearInterval(state.timer); $("go").disabled = false; if (state.source) { state.source.close(); state.source = null; } renderRuns();
+  }
+}
+function watch(run) {
+  resetRun(run);
+  state.source = new EventSource(`/api/runs/${run.id}/events`);
+  state.source.onmessage = (m) => addEvent(JSON.parse(m.data));
+  document.title = `${host(run.url)} · Web Analyst`;
+}
+
+$("copyMd").onclick = async () => { await navigator.clipboard.writeText(state.report); $("copyMd").textContent = "Copied"; setTimeout(() => ($("copyMd").textContent = "Copy Markdown"), 1500); };
+$("dlMd").onclick = () => {
+  const a = el("a"); a.href = URL.createObjectURL(new Blob([state.report], { type: "text/markdown" }));
+  a.download = `${host($("runUrl").textContent) || "report"}-analysis.md`; a.click(); URL.revokeObjectURL(a.href);
+};
+
+// ---------- submit ----------
+async function submit(ev) {
+  ev.preventDefault();
+  const err = $("formErr"); err.hidden = true;
+  if (state.mode === "choose" && !state.picked.length) { err.textContent = "Pick at least one skill, or switch to Let the agent choose."; err.hidden = false; return; }
+  $("go").disabled = true;
+  const body = { url: $("url").value, objective: $("objective").value, skills: state.mode === "choose" ? state.picked : [], allow_skill_writes: $("writes").checked };
+  let res;
+  try { res = await fetch("/api/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+  catch { $("go").disabled = false; err.textContent = "Could not reach the server. Is it still running?"; err.hidden = false; return; }
+  if (!res.ok) {
+    $("go").disabled = false;
+    const d = (await res.json().catch(() => ({}))).detail;
+    err.textContent = typeof d === "string" ? d : Array.isArray(d) ? "Check the link and objective: " + d.map((x) => x.msg).join("; ") : "Something went wrong. Check the link and objective.";
+    err.hidden = false; return;
+  }
+  const { id } = await res.json();
+  watch({ id, url: body.url, objective: body.objective });
+}
+$("form").addEventListener("submit", submit);
+$("form").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("form").requestSubmit(); });
+
+// ---------- history ----------
+async function renderRuns() {
+  let list = []; try { list = await (await fetch("/api/runs")).json(); } catch {}
+  const ul = $("runs"); ul.replaceChildren();
+  if (!list.length) { ul.append(el("li", "empty", "No runs yet. Start one and it will show up here.")); return; }
+  for (const r of list.slice(0, 12)) {
+    const li = el("li"), b = el("button"); b.type = "button"; if (r.id === state.currentRun) b.className = "cur";
+    const meta = el("span", "m"); const pill = el("span", "pill " + r.status, r.status === "done" ? "Done" : r.status === "error" ? "Failed" : "Running");
+    meta.append(pill, el("span", "", ago(r.created)), ...(r.skills && r.skills.length ? [el("span", "", `${r.skills.length} skill${r.skills.length > 1 ? "s" : ""}`)] : []));
+    b.append(el("span", "h", host(r.url)), meta, el("span", "ob", r.objective));
+    b.onclick = () => watch(r); li.append(b); ul.append(li);
+  }
+}
+
+// ---------- start ----------
+const params = new URLSearchParams(location.search);
+loadSkills().then(() => { if (params.get("mode") === "choose") { state.picked = (params.get("pick") || "").split(",").filter(Boolean); setMode("choose"); renderPicker(); } });
+renderRuns();
+if (params.get("run")) fetch("/api/runs/" + encodeURIComponent(params.get("run"))).then((r) => r.ok ? r.json() : null).then((r) => r && watch(r));
+setInterval(renderRuns, 15000);
+</script>
+</body>
+</html>
