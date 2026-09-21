@@ -150,8 +150,19 @@ class SkillStore:
                     installed.append(src.parent.name)
         return installed
 
-    def catalog_text(self) -> str:
+    def catalog_text(self, max_desc: int = 150, only: "set[str] | None" = None) -> str:
+        """One line per skill for the agent's first message. Descriptions are shortened at a word
+        boundary to keep the prompt small on free models; load_skill returns the full text.
+        With `only`, the catalog is limited to those names plus skills the agent wrote itself."""
         skills = self.list()
+        if only is not None:
+            skills = [s for s in skills if s["name"] in only or s["category"] == "Custom"]
         if not skills:
             return "(the skill library is empty)"
-        return "\n".join(f"- {s['name']}: {s['description']}" for s in skills)
+
+        def short(text: str) -> str:
+            if len(text) <= max_desc:
+                return text
+            return text[:max_desc].rsplit(" ", 1)[0].rstrip(",;:") + "..."
+
+        return "\n".join(f"- {s['name']}: {short(s['description'])}" for s in skills)

@@ -27,7 +27,7 @@ def test_host_header_is_restricted(client):
 
 def test_run_lifecycle_and_sse(client, monkeypatch):
     seen = {}
-    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None):
+    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None):
         emit("text", text="hello")
         seen.update(selected=selected_skills, writes=allow_skill_writes)
         return "# Report", {"turns": 1}
@@ -82,7 +82,7 @@ def test_stop_run(client, monkeypatch):
     import time
     from app.agent import AgentCancelled
 
-    def slow_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None):
+    def slow_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None):
         for _ in range(200):
             if should_stop():
                 raise AgentCancelled()
@@ -98,3 +98,24 @@ def test_stop_run(client, monkeypatch):
     assert client.get(f"/api/runs/{run_id}").json()["status"] == "cancelled"
     assert client.post(f"/api/runs/{run_id}/stop").status_code == 409     # already finished
     assert client.post("/api/runs/nope/stop").status_code == 404
+
+
+def test_personas_api_hides_the_lens(client):
+    data = client.get("/api/personas").json()
+    assert [p["id"] for p in data] == ["product-manager", "seo-analyst", "front-end-engineer", "back-end-engineer", "ai-engineer"]
+    assert all("lens" not in p and p["skills"] and p["examples"] for p in data)
+
+
+def test_persona_is_validated_and_passed_to_the_agent(client, monkeypatch):
+    seen = {}
+
+    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None):
+        seen["persona"] = persona.id if persona else None
+        return "# Report", {}
+    monkeypatch.setattr("app.runs.run_agent", fake_run)
+
+    assert client.post("/api/runs", json={"url": "example.com", "objective": "look", "persona": "nope"}).status_code == 422
+    run_id = client.post("/api/runs", json={"url": "example.com", "objective": "look", "persona": "seo-analyst"}).json()["id"]
+    with client.stream("GET", f"/api/runs/{run_id}/events") as r:
+        list(r.iter_lines())
+    assert seen["persona"] == "seo-analyst" and client.get(f"/api/runs/{run_id}").json()["persona"] == "seo-analyst"

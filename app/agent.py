@@ -21,6 +21,10 @@ NO_EVIDENCE_NOTE = (
     "You have not fetched the target yet, so you have no evidence. Do not write a report from memory. "
     "Call fetch_page on the target URL now, using the tool-calling interface."
 )
+SOFT_WRAP_NOTE = (
+    "You are running low on turns. Make at most one more round of tool calls, batching every remaining "
+    "check together, then write the final report."
+)
 SKILL_PREFIX = "---\nname: "
 
 
@@ -30,6 +34,15 @@ class AgentError(Exception):
 
 class AgentCancelled(Exception):
     """The user pressed Stop. Raised between steps, never in the middle of one."""
+
+
+def clean_report(text: str) -> str:
+    """Drop narration a model writes before the report ("Now I need to gather...").
+    Only cuts when the first markdown heading appears early and nothing before it is a heading."""
+    m = re.search(r"^#{1,3} \S", text, re.M)
+    if m and 0 < m.start() <= 1200 and "#" not in text[: m.start()]:
+        return text[m.start():].lstrip()
+    return text
 
 
 def _preview(text: str, n: int = 300) -> str:
@@ -104,6 +117,7 @@ def run_agent(
     selected_skills: list[str] | None = None,
     allow_skill_writes: bool = True,
     should_stop: Callable[[], bool] = lambda: False,
+    persona=None,
 ) -> tuple[str, dict]:
     """Run one analysis. Returns (report_markdown, usage). Raises AgentError on failure.
 
@@ -129,8 +143,14 @@ def run_agent(
     usage = {"input": 0, "output": 0, "turns": 0, "fetches": 0, "models": []}
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": first_message(url, objective, skills.catalog_text(), selected, allow_skill_writes)},
+        {"role": "user", "content": first_message(
+            url, objective,
+            skills.catalog_text(only=set(persona.skills) if persona is not None else None),
+            selected, allow_skill_writes, persona,
+        )},
     ]
+    if persona is not None:
+        emit("persona", id=persona.id, name=persona.name)
     if selected:
         emit("skills", names=[n for n, _ in selected], writes=allow_skill_writes)
     seen_calls: Counter = Counter()
@@ -138,12 +158,15 @@ def run_agent(
     last_served = None
 
     try:
-        for turn in range(config.MAX_TURNS):
+        # Two extra iterations exist only for the "reply was cut off" path after the forced final turn.
+        for turn in range(config.MAX_TURNS + 2):
             if should_stop():
                 raise AgentCancelled()
-            last_turn = turn == config.MAX_TURNS - 1
-            if last_turn:
+            last_turn = turn >= config.MAX_TURNS - 1
+            if turn == config.MAX_TURNS - 1:
                 messages.append({"role": "user", "content": WRAP_UP_NOTE})
+            elif turn == config.MAX_TURNS - 3 and config.MAX_TURNS > 4:
+                messages.append({"role": "user", "content": SOFT_WRAP_NOTE})
             trim_history(messages)
 
             try:
@@ -197,7 +220,7 @@ def run_agent(
                     nudges += 1
                     messages += [assistant, {"role": "user", "content": NO_EVIDENCE_NOTE}]
                     continue
-                report = comp.text
+                report = clean_report(comp.text)
                 if len(report) > config.MAX_REPORT_CHARS:
                     report = report[: config.MAX_REPORT_CHARS] + "\n\n[Report truncated: the model's output ran unusually long.]"
                 usage["fetches"] = fetcher.fetch_count

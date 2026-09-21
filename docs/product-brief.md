@@ -26,7 +26,20 @@ Analysts and marketers repeat the same website checks all the time: SEO, securit
 | Chosen skills are sent to the model in full | Saves model requests, which matters on free tiers | Longer first message |
 | Fetcher blocks private networks and honors robots.txt | A tool that fetches URLs for users must not become a way into internal systems | Some sites cannot be analyzed |
 | Static HTML only, no browser rendering in v1 | Keeps it fast, cheap and predictable | Client-rendered pages come back thin, and the report says so |
+| Perspectives: one site, five lenses (PM, SEO, front end, back end, AI) | The person who asks decides what a good answer is. A PM wants hypotheses and metrics, an engineer wants a fix and a snippet | More content to maintain. A shared skill can be framed differently by each lens |
 | Stop button and step-by-step log | Runs cost quota and take up to a minute or more | Extra interface to build and test |
+
+## Perspectives
+
+**Problem.** One generic report serves nobody well. A product manager needs the user and the hypothesis. An SEO analyst needs the exact title rewrite. A back end engineer needs the header value. Sending all of them the same audit means each has to translate it.
+
+**Design.** A perspective is a data file with three parts: a lens (how to frame findings and what to leave out), the skills that fit the role, and example objectives. Choosing one changes the report's framing, narrows the skill catalog the model reads (which also keeps the prompt small on free models), reorders the skill picker to show that role's skills first, and swaps the example prompts.
+
+**What ships.** Five perspectives and 50 skills: 13 for product management, and new skills for SEO (4), front end (4), back end (5) and AI engineering (5). Adding a role is adding one JSON file, and a test checks that every listed skill exists.
+
+**Checked.** The same run configuration produced clearly different reports: a front end report with severity, selectors, counts and before and after markup; a back end report that found a Swagger 2.0 spec and flagged that it could only read part of it; an AI engineering report that separated three AI features by job, grounding and controls.
+
+**Found while testing.** A front end run failed because the model followed a 20-selector checklist one selector per call and ran out of turns. The fix was in the product: `query_page` now takes several selectors per call, the agent gets an earlier wrap-up warning, and a cut-off final reply gets a second chance. The rerun finished in 7 requests.
 
 ## UX and accessibility
 

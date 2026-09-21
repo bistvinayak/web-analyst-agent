@@ -1,3 +1,4 @@
+import json
 import copy
 
 import pytest
@@ -183,3 +184,66 @@ def test_stop_is_honored_between_steps(site, local_ok, tmp_path):
     with pytest.raises(AgentCancelled):
         run_agent(site + "/", "obj", emit, SkillStore(tmp_path), llm, should_stop=lambda: stop["now"])
     assert len(llm.calls) == 1        # no second model request was made
+
+
+from app.agent import clean_report
+
+
+def test_clean_report_drops_leaked_narration_only():
+    leaked = "Now I need to gather information.\n\nBased on what I found, here goes:\n\n## Analysis\nReal content."
+    assert clean_report(leaked) == "## Analysis\nReal content."
+    assert clean_report("# Title\nBody") == "# Title\nBody"                       # already clean
+    assert clean_report("No headings here at all.") == "No headings here at all."  # nothing to cut
+    assert clean_report("Intro\n# H1\ntext\n\n## H2") == "# H1\ntext\n\n## H2"
+    long_prefix = "word " * 400 + "\n## Late heading"
+    assert clean_report(long_prefix) == long_prefix                                 # too far in: do not guess
+    assert clean_report("Uses C# a lot.\n## Real") == "Uses C# a lot.\n## Real"     # prefix contains '#': leave alone
+
+
+def test_soft_wrap_up_warning_comes_two_turns_before_the_limit(site, local_ok, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "MAX_TURNS", 5)
+    step = lambda i: comp(calls=[call(f"t{i}", "fetch_page", url=site + f"/?q={i}")])
+    llm = FakeLLM([step(1), step(2), step(3), step(4), comp(text="# Final report")])
+    report, _ = run(llm, tmp_path, site + "/")
+    assert report == "# Final report"
+    assert "running low on turns" in llm.calls[2]["messages"][-1]["content"]      # turn index 2 of 5
+    assert "Turn budget reached" in llm.calls[4]["messages"][-1]["content"]
+
+
+def test_cut_off_final_reply_gets_a_second_chance(site, local_ok, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "MAX_TURNS", 2)
+    llm = FakeLLM([
+        comp(calls=[call("t1", "fetch_page", url=site + "/")]),
+        comp(text="", finish="length"),                     # the forced final turn was spent on reasoning
+        comp(text="# Report after retry"),
+    ])
+    report, _ = run(llm, tmp_path, site + "/")
+    assert report == "# Report after retry"
+    assert llm.calls[2]["tool_choice"] == "none" and llm.calls[2]["messages"][-1]["content"].startswith("Continue")
+
+
+def test_query_page_takes_several_selectors_in_one_call(site, local_ok, tmp_path):
+    url = site + "/"
+    llm = FakeLLM([
+        comp(calls=[call("t1", "fetch_page", url=url)]),
+        comp(calls=[call("t2", "query_page", url=url, selectors=["h1", "a[href]", "img:not([alt])"], attribute=None),
+                    call("t3", "query_page", url=url, selectors=[])]),
+        comp(text="# ok"),
+    ])
+    run(llm, tmp_path, url)
+    good, bad = llm.calls[2]["messages"][-2], llm.calls[2]["messages"][-1]
+    data = json.loads(good["content"])["results"]["results"]
+    assert [r["selector"] for r in data] == ["h1", "a[href]", "img:not([alt])"] and data[0]["match_count"] == 1
+    assert bad["content"].startswith("Error:") and "selectors" in bad["content"]
+
+
+def test_selectors_sent_as_one_comma_separated_string_still_work(site, local_ok, tmp_path):
+    url = site + "/"
+    llm = FakeLLM([
+        comp(calls=[call("t1", "fetch_page", url=url)]),
+        comp(calls=[call("t2", "query_page", url=url, selectors="h1, h2, a[href], img, .a-selector-that-is-longer-than-twelve")]),
+        comp(text="# ok"),
+    ])
+    run(llm, tmp_path, url)
+    result = llm.calls[2]["messages"][-1]["content"]
+    assert not result.startswith("Error:") and '"match_count"' in result

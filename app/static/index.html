@@ -83,6 +83,17 @@
   button.danger { color: var(--warn); border-color: var(--warn); }
   button.stop { border-color: var(--warn); color: var(--warn); }
 
+  fieldset.persona { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
+  .pcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.5rem), 1fr)); gap: 8px; }
+  .pcard { position: relative; display: block; }
+  .pcard input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .pc-body { display: grid; align-content: start; gap: 3px; height: 100%; padding: 10px 12px; border: 1px solid var(--control); border-radius: 6px; background: var(--field); min-height: 44px; }
+  .pc-name { font: 700 .875rem var(--display); }
+  .pc-tag { font-size: .8125rem; line-height: 1.35; color: var(--muted); }
+  .pcard input:checked + .pc-body { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  .pcard input:checked + .pc-body .pc-name::after { content: " \2713"; color: var(--accent); }
+  .pcard input:checked + .pc-body .pc-tag { color: var(--ink); }
+  .pcard input:focus-visible + .pc-body { outline: 3px solid var(--accent); outline-offset: 2px; }
   fieldset.skills { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; min-width: 0; }
   .seg { display: inline-grid; grid-auto-flow: column; justify-self: start; border: 1px solid var(--control); border-radius: 6px; overflow: hidden; background: var(--field); max-width: 100%; }
   .seg label { position: relative; }
@@ -192,7 +203,7 @@
   dialog .btns .grp { display: flex; flex-wrap: wrap; gap: 8px; }
 
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
-  @media (forced-colors: active) { .opt.on, .seg input:checked + span { outline: 2px solid Highlight; } .stage, .pill, .tag { border: 1px solid CanvasText; } }
+  @media (forced-colors: active) { .opt.on, .seg input:checked + span, .pcard input:checked + .pc-body { outline: 2px solid Highlight; } .stage, .pill, .tag { border: 1px solid CanvasText; } }
   @media print {
     body { background: #fff; color: #000; } .skip, .top nav, form, #runPanel, .rail, .rep-head .btns { display: none !important; }
     .panel { border: 0; padding: 0; } .layout { display: block; } .report { max-width: none; }
@@ -224,6 +235,12 @@
           <p class="hint" id="urlHint">The https:// is added if you leave it off.</p>
           <p class="field-err" id="urlErr" hidden></p>
         </div>
+
+        <fieldset class="persona">
+          <legend>Perspective</legend>
+          <p class="hint" id="personaHint">Choose who is asking. The report is written in that role's terms, and the skills shown match it.</p>
+          <div class="pcards" id="pcards"></div>
+        </fieldset>
 
         <div class="field">
           <label class="lbl" for="objective">Objective</label>
@@ -312,7 +329,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const MAX_SKILLS = 5;
-const state = { skills: [], picked: [], mode: "auto", filter: "", currentRun: null, source: null, timer: null, firstTs: 0, lastTs: 0, report: "", stage: 0, viewSkill: null, running: false };
+const state = { skills: [], picked: [], mode: "auto", filter: "", currentRun: null, source: null, timer: null, firstTs: 0, lastTs: 0, report: "", stage: 0, viewSkill: null, running: false, persona: "", personas: [] };
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -321,11 +338,12 @@ const store = {
 let announceTimer;
 function say(msg) { const a = $("announce"); a.textContent = ""; clearTimeout(announceTimer); announceTimer = setTimeout(() => (a.textContent = msg), 60); }
 
-const EXAMPLES = [
+const GENERAL_EXAMPLES = [
+  { label: "Product teardown", url: "https://basecamp.com", objective: "Tear down this product like a product manager: who it is for, the job it does, how it makes money, and what you would change.", skills: ["product-teardown"] },
+  { label: "Positioning", url: "https://basecamp.com", objective: "Is this positioning clear? Assess it and write a sharper positioning statement.", skills: ["positioning-teardown"] },
+  { label: "Onboarding", url: "https://basecamp.com", objective: "Review the path from landing to first value and suggest three experiments to lift signups.", skills: ["onboarding-and-signup-flow-review"] },
   { label: "SEO check", url: "https://example.com", objective: "Give me a quick on-page SEO audit and the five fixes with the biggest impact.", skills: ["seo-onpage-audit"] },
   { label: "Security headers", url: "https://example.com", objective: "Review the security headers and tell me the top three fixes.", skills: ["security-headers-review"] },
-  { label: "Pricing teardown", url: "https://stripe.com/pricing", objective: "Break down this pricing page: plans, metrics, and what stands out.", skills: ["pricing-page-teardown"] },
-  { label: "Company brief", url: "https://example.com", objective: "Write a research brief on this company from its own website.", skills: [] },
 ];
 
 // ---------- theme: System, Light, Dark ----------
@@ -405,26 +423,52 @@ const STATUS = { done: "Done", error: "Failed", cancelled: "Stopped", running: "
 
 // ---------- draft: keep what the user typed across reloads ----------
 function saveDraft() {
-  store.set("wa-draft", JSON.stringify({ url: $("url").value, objective: $("objective").value, mode: state.mode, picked: state.picked, writes: $("writes").checked }));
+  store.set("wa-draft", JSON.stringify({ url: $("url").value, objective: $("objective").value, mode: state.mode, picked: state.picked, writes: $("writes").checked, persona: state.persona }));
 }
 function loadDraft() {
   try {
     const d = JSON.parse(store.get("wa-draft") || "null"); if (!d) return;
     $("url").value = d.url || ""; $("objective").value = d.objective || ""; $("writes").checked = d.writes !== false;
-    state.picked = (d.picked || []).slice(0, MAX_SKILLS); setMode(d.mode === "choose" ? "choose" : "auto");
+    state.picked = (d.picked || []).slice(0, MAX_SKILLS); setPersona(d.persona || "", true); setMode(d.mode === "choose" ? "choose" : "auto");
   } catch {}
 }
 ["url", "objective", "writes"].forEach((id) => $(id).addEventListener("input", saveDraft));
 
+// ---------- perspective (persona) ----------
+const currentPersona = () => state.personas.find((p) => p.id === state.persona) || null;
+function renderPersonas() {
+  const box = $("pcards"); box.replaceChildren();
+  const all = [{ id: "", name: "Any perspective", tagline: "No particular role. The agent picks from every skill." }, ...state.personas];
+  for (const p of all) {
+    const lab = el("label", "pcard"); const inp = el("input"); inp.type = "radio"; inp.name = "persona"; inp.value = p.id; inp.checked = p.id === state.persona;
+    inp.onchange = () => setPersona(p.id);
+    const body = el("span", "pc-body"); body.append(el("span", "pc-name", p.name), el("span", "pc-tag", p.tagline));
+    lab.append(inp, body); box.append(lab);
+  }
+}
+function setPersona(id, quiet) {
+  state.persona = state.personas.some((p) => p.id === id) ? id : "";
+  const radio = document.querySelector(`input[name=persona][value="${state.persona}"]`); if (radio) radio.checked = true;
+  const p = currentPersona();
+  $("objective").placeholder = p && p.examples.length ? "For example: " + p.examples[0].objective : "For example: audit the on-page SEO and list the five fixes with the biggest impact.";
+  renderExamples(); renderPicker(); saveDraft();
+  if (!quiet) say(p ? `Perspective: ${p.name}. Skills and examples updated.` : "Perspective cleared.");
+}
+
 // ---------- composer: examples ----------
-for (const ex of EXAMPLES) {
-  const b = el("button", "chip", ex.label); b.type = "button";
-  b.onclick = () => {
-    $("url").value = ex.url; $("objective").value = ex.objective; clearFieldError("url"); clearFieldError("objective");
-    const have = ex.skills.filter((n) => state.skills.some((s) => s.name === n));
-    state.picked = have; setMode(have.length ? "choose" : "auto"); renderPicker(); saveDraft(); say(`Example loaded: ${ex.label}`);
-  };
-  $("examples").append(b);
+function renderExamples() {
+  const box = $("examples");
+  box.querySelectorAll("button").forEach((b) => b.remove());
+  const p = currentPersona(), list = p && p.examples.length ? p.examples : GENERAL_EXAMPLES;
+  for (const ex of list) {
+    const b = el("button", "chip", ex.label); b.type = "button";
+    b.onclick = () => {
+      $("url").value = ex.url; $("objective").value = ex.objective; clearFieldError("url"); clearFieldError("objective");
+      const have = ex.skills.filter((n) => state.skills.some((s) => s.name === n));
+      state.picked = have; setMode(have.length ? "choose" : "auto"); renderPicker(); saveDraft(); say(`Example loaded: ${ex.label}`);
+    };
+    box.append(b);
+  }
 }
 
 // ---------- field errors ----------
@@ -476,12 +520,22 @@ function renderPicker(refocus) {
     if (state.skillsError) { const b = el("button", "", "Try again"); b.type = "button"; b.onclick = loadSkills; box.append(b); }
     return;
   }
-  const ORDER = ["Orientation", "Search and visibility", "Conversion and content", "Technical and compliance", "Custom"];
-  const cats = [...new Set(shown.map((s) => s.category))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
-  for (const c of cats) {
-    const sec = el("div", "cat"); sec.append(el("h3", "", c));
+  const ORDER = ["Product management", "Orientation", "Search and visibility", "Front end", "Back end", "AI engineering", "Conversion and content", "Technical and compliance", "Custom"];
+  const rank = (c) => (ORDER.indexOf(c) + 1 || 99);
+  const persona = currentPersona();
+  const groups = [];
+  let rest = shown;
+  if (persona) {
+    const rec = persona.skills.map((n) => shown.find((s) => s.name === n)).filter(Boolean);
+    if (rec.length) groups.push({ title: `Recommended for ${persona.name}`, items: rec });
+    rest = shown.filter((s) => !persona.skills.includes(s.name));
+  }
+  const cats = [...new Set(rest.map((s) => s.category))].sort((a, b) => rank(a) - rank(b));
+  for (const c of cats) groups.push({ title: persona ? `Other: ${c}` : c, items: rest.filter((x) => x.category === c) });
+  for (const g of groups) {
+    const sec = el("div", "cat"); sec.append(el("h3", "", g.title));
     const grid = el("div", "opts");
-    for (const s of shown.filter((x) => x.category === c)) {
+    for (const s of g.items) {
       const on = state.picked.includes(s.name);
       const row = el("div", "opt" + (on ? " on" : "") + (!on && full ? " off" : ""));
       const cb = el("input"); cb.type = "checkbox"; cb.id = "sk-" + s.name; cb.checked = on; cb.disabled = !on && full;
@@ -564,6 +618,8 @@ function addEvent(e) {
     for (const n of e.names) $("runChips").append(el("span", "tag skill", n));
     if (!e.writes) $("runChips").append(el("span", "tag", "skill writing off"));
     row("skill", "Skills", [el("div", "what", "You chose: " + e.names.join(", "))]);
+  } else if (t === "persona") {
+    $("runChips").prepend(el("span", "tag skill", "Perspective: " + e.name));
   } else if (t === "llm") {
     row("", "Model", [el("div", "say", e.message)]);
   } else if (t === "thinking") {
@@ -637,7 +693,7 @@ async function submit(ev) {
 
   $("go").disabled = true; $("go").textContent = "Starting"; $("form").setAttribute("aria-busy", "true");
   const reset = () => { $("go").disabled = false; $("go").textContent = "Analyze"; $("form").removeAttribute("aria-busy"); };
-  const body = { url: $("url").value, objective: $("objective").value, skills: state.mode === "choose" ? state.picked : [], allow_skill_writes: $("writes").checked };
+  const body = { url: $("url").value, objective: $("objective").value, skills: state.mode === "choose" ? state.picked : [], allow_skill_writes: $("writes").checked, persona: state.persona };
   let res;
   try { res = await fetch("/api/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
   catch { reset(); showFormError("Could not reach the server. Check that it is still running, then try again."); return; }
@@ -674,7 +730,8 @@ async function renderRuns() {
   for (const r of list.slice(0, 12)) {
     const li = el("li"), b = el("button"); b.type = "button"; if (r.id === state.currentRun) { b.className = "cur"; b.setAttribute("aria-current", "true"); }
     const meta = el("span", "m"); const pill = el("span", "pill " + r.status, STATUS[r.status] || r.status);
-    meta.append(pill, el("span", "", ago(r.created)), ...(r.skills && r.skills.length ? [el("span", "", `${r.skills.length} skill${r.skills.length > 1 ? "s" : ""}`)] : []));
+    const pname = (state.personas.find((p) => p.id === r.persona) || {}).name;
+    meta.append(pill, ...(pname ? [el("span", "", pname)] : []), el("span", "", ago(r.created)), ...(r.skills && r.skills.length ? [el("span", "", `${r.skills.length} skill${r.skills.length > 1 ? "s" : ""}`)] : []));
     b.append(el("span", "h", host(r.url)), meta, el("span", "ob", r.objective));
     b.onclick = () => watch(r); li.append(b); ul.append(li);
   }
@@ -683,12 +740,17 @@ async function renderRuns() {
 // ---------- start ----------
 const params = new URLSearchParams(location.search);
 const hasParams = params.get("run") || params.get("mode");
-loadSkills().then(() => {
+async function loadPersonas() {
+  try { const r = await fetch("/api/personas"); state.personas = r.ok ? await r.json() : []; } catch { state.personas = []; }
+  renderPersonas();
+}
+Promise.all([loadPersonas(), loadSkills()]).then(() => {
   if (!hasParams) loadDraft();
+  if (params.get("persona")) setPersona(params.get("persona"), true);
   if (params.get("mode") === "choose") { state.picked = (params.get("pick") || "").split(",").filter(Boolean); setMode("choose"); renderPicker(); }
   renderPicker();
 });
-renderRuns();
+renderExamples(); renderRuns();
 if (params.get("run")) fetch("/api/runs/" + encodeURIComponent(params.get("run"))).then((r) => r.ok ? r.json() : null).then((r) => r && watch(r));
 setInterval(renderRuns, 15000);
 </script>

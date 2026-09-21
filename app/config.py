@@ -42,12 +42,13 @@ LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "90"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))  # per endpoint, for 429/5xx/network errors
 
 SKILLS_DIR = Path(os.getenv("SKILLS_DIR", ROOT / "skills"))
+PERSONAS_DIR = Path(os.getenv("PERSONAS_DIR", ROOT / "personas"))
 SEED_SKILLS_DIR = ROOT / "seed_skills"  # shipped starter skills, copied into SKILLS_DIR if missing
 RUNS_DIR = Path(os.getenv("RUNS_DIR", ROOT / "runs"))
 
 # Agent limits. Free tiers cap requests per day, so the defaults are conservative.
 MAX_TURNS = int(os.getenv("MAX_TURNS", "15"))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "8192"))
 MAX_CONCURRENT_RUNS = int(os.getenv("MAX_CONCURRENT_RUNS", "2"))
 # Old tool results are trimmed once the conversation passes this size, for small-context models.
 CONTEXT_CHAR_BUDGET = int(os.getenv("CONTEXT_CHAR_BUDGET", "100000"))

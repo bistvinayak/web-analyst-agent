@@ -58,7 +58,7 @@ TOOL_NAMES = ("fetch_page", "fetch_raw", "query_page")
 
 
 def test_seed_skills_exist():
-    assert len(SEEDS) >= 15
+    assert len(SEEDS) >= 45
 
 
 @pytest.mark.parametrize("path", SEEDS, ids=lambda p: p.parent.name)
@@ -78,14 +78,16 @@ def test_seed_cross_references_point_at_real_skills():
     for p in SEEDS:
         body = p.read_text(encoding="utf-8")
         for ref in re.findall(r"\b([a-z0-9]+(?:-[a-z0-9]+)+)\b", body):
-            if ref.endswith(("-audit", "-review", "-teardown", "-detection", "-comparison", "-check", "-readiness", "-crawlability", "-metadata", "-overview", "-brief", "-signals")):
+            if ref.endswith(("-audit", "-review", "-teardown", "-detection", "-comparison", "-check", "-readiness", "-crawlability", "-metadata", "-overview", "-brief", "-signals", "-matrix", "-inference", "-analysis", "-synthesis", "-scan", "-mapping", "-discovery")):
                 assert ref in names, f"{p.parent.name} references unknown skill {ref}"
 
 
 def test_catalog_stays_small(tmp_path):
     store = SkillStore(tmp_path)
     store.install_seeds()
-    assert len(store.catalog_text()) < 6000
+    text = store.catalog_text()
+    assert len(text) < 9500 and text.count("\n") == len(SEEDS) - 1
+    assert all(len(line) <= 2 + 48 + 2 + 150 + 3 for line in text.splitlines())
 
 
 def test_install_seeds_never_overwrites(tmp_path):

@@ -8,6 +8,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+from .personas import PersonaError, get_persona, load_personas
 from .runs import RunManager, TooManyRuns
 from .skills import SkillError, SkillStore
 
@@ -27,6 +28,7 @@ class RunRequest(BaseModel):
     objective: str = Field(min_length=3, max_length=2000)
     skills: list[str] = Field(default_factory=list, max_length=5)  # empty: the agent chooses
     allow_skill_writes: bool = True
+    persona: str = ""  # empty: no particular perspective
 
     @field_validator("url")
     @classmethod
@@ -42,13 +44,18 @@ class RunRequest(BaseModel):
 
 @app.post("/api/runs", status_code=201)
 def create_run(body: RunRequest):
+    if body.persona:
+        try:
+            get_persona(body.persona)
+        except PersonaError as e:
+            raise HTTPException(422, str(e))
     for name in body.skills:
         try:
             skills.load(name)
         except SkillError:
             raise HTTPException(422, f"Unknown skill '{name}'. Refresh the page and pick again.")
     try:
-        run = manager.start(body.url, body.objective.strip(), list(dict.fromkeys(body.skills)), body.allow_skill_writes)
+        run = manager.start(body.url, body.objective.strip(), list(dict.fromkeys(body.skills)), body.allow_skill_writes, body.persona)
     except TooManyRuns as e:
         raise HTTPException(429, str(e))
     return {"id": run.id}
@@ -100,6 +107,11 @@ async def run_events(run_id: str, request: Request):
             await asyncio.sleep(0.25)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/personas")
+def list_personas():
+    return [p.public() for p in load_personas().values()]
 
 
 @app.get("/api/skills")

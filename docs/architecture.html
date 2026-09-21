@@ -145,7 +145,7 @@
         <div><dt>Entry</dt><dd>app/server.py, FastAPI</dd></div>
         <div><dt>Model API</dt><dd>OpenAI-compatible chat completions</dd></div>
         <div><dt>State</dt><dd>files on disk, no database</dd></div>
-        <div><dt>Tests</dt><dd>93, all offline</dd></div>
+        <div><dt>Tests</dt><dd>141, all offline</dd></div>
       </dl>
     </div>
     <nav class="toc" aria-label="Sections">
@@ -234,7 +234,7 @@
             <text class="t" x="435" y="580" text-anchor="middle">skills/</text><text class="s" x="435" y="594" text-anchor="middle">SKILL.md files</text>
             <rect class="node-store" x="190" y="552" width="130" height="48" rx="4"/>
             <line class="band" x1="190" y1="561" x2="320" y2="561"/>
-            <text class="t" x="255" y="580" text-anchor="middle">seed_skills/</text><text class="s" x="255" y="594" text-anchor="middle">19 starters</text>
+            <text class="t" x="255" y="580" text-anchor="middle">seed_skills/</text><text class="s" x="255" y="594" text-anchor="middle">50 starters</text>
             <line class="edge" x1="320" y1="576" x2="370" y2="576" marker-end="url(#ah1)"/>
             <text class="lbl" x="345" y="568" text-anchor="middle">copy</text>
 
@@ -283,7 +283,7 @@
       <ol class="steps">
         <li><p>You submit a link and an objective. <code>index.html</code> posts them to <code>/api/runs</code>. <code>server.py</code> checks the URL shape and lengths, and refuses if two runs are already active.</p></li>
         <li><p><code>runs.py</code> creates a run with a random id, starts a thread, and returns the id. The page opens <code>/api/runs/{id}/events</code>, a server-sent event stream that replays the run's log from event 0, so reloading the page or opening a second tab still works.</p></li>
-        <li><p><code>agent.py</code> builds the first messages: the system prompt, the target, the objective, and a catalog with one line per skill. If you picked skills in the form, their full text is placed in this message too, so the model does not spend requests loading them.</p></li>
+        <li><p><code>agent.py</code> builds the first messages: the system prompt, the target, the objective, and a catalog with one line per skill. If you chose a perspective, its lens is placed first and the catalog shrinks to that role's skills. If you picked skills in the form, their full text is placed in this message too, so the model does not spend requests loading them.</p></li>
         <li><p>Each turn, <code>llm.py</code> sends the messages and the tool schemas to OpenRouter chain 1, then chain 2, then the fallback API. The first success returns text, optional reasoning, and tool calls.</p></li>
         <li><p>Tool calls go to <code>tools.py</code>. Skill calls read or write <code>skills/</code>. Fetches go through <code>webfetch.py</code>, which validates the URL, follows redirects one hop at a time, and returns a structured summary that is marked as untrusted.</p></li>
         <li><p>Every step becomes an event. The model's first reply with no tool call is the report. <code>runs.py</code> then saves the events, metadata and report under <code>runs/&lt;id&gt;/</code>.</p></li>
@@ -357,6 +357,7 @@
             <tr><td>agent.py</td><td>The loop and its guards: evidence check, repeat-call block, argument errors, history trimming, forced final report.</td><td class="dim">llm.py, tools.py, prompts.py</td></tr>
             <tr><td>llm.py</td><td>Provider-neutral chat client. Model chains, retries, failover, live discovery of free tool-capable models, cleanup of leaked reasoning text.</td><td class="dim">OpenRouter, fallback API</td></tr>
             <tr><td>tools.py</td><td>The five tool schemas and their dispatcher. Turns expected failures into error results the model can read and recover from.</td><td class="dim">skills.py, webfetch.py</td></tr>
+            <tr><td>personas.py</td><td>Loads the role definitions from <code>personas/</code>: the lens the model writes from, the recommended skills, and example objectives for the page.</td><td class="dim">prompts.py, server.py</td></tr>
             <tr><td>skills.py</td><td>The skill library: name and size validation, atomic writes, versioning with history, seed installation.</td><td class="dim">skills/, seed_skills/</td></tr>
             <tr><td>webfetch.py</td><td>The only outbound HTTP made for the agent, plus the HTML summarizer and the CSS selector query.</td><td class="dim">target websites</td></tr>
             <tr><td>prompts.py</td><td>The system prompt: workflow, how to write skills, analysis rules, report format.</td><td class="dim">agent.py</td></tr>
@@ -409,6 +410,8 @@
       <div class="split">
         <div class="prose">
           <p>A skill is a Markdown playbook, one folder each. The agent never executes anything it writes, so there is no sandbox to build or trust.</p>
+          <h3>Perspectives</h3>
+          <p>The same site needs a different report depending on who asks. A perspective is a small JSON file with a lens (how to frame findings and what to leave out), the skills that fit that role, and example objectives. Five ship: Product Manager, SEO Analyst, Front End Engineer, Back End Engineer and AI Engineer. Adding a sixth means adding one file.</p>
           <h3>Life cycle</h3>
           <p><strong>Installed.</strong> At startup, any folder in <code>seed_skills/</code> that is missing from <code>skills/</code> is copied in. Existing folders are never touched.</p>
           <p><strong>Used.</strong> The first message carries one line per skill, the name and description. When the model picks one, <code>load_skill</code> returns the full body. If you choose skills in the form (up to 5), their bodies are inlined instead, and you can switch off skill writing for the run.</p>
@@ -496,10 +499,11 @@
     <pre>web-analyst-agent/
   app/            agent.py  config.py  llm.py  prompts.py  runs.py
                   server.py  skills.py  tools.py  webfetch.py  static/index.html
-  seed_skills/    19 starter skills, tracked in git
+  seed_skills/    50 starter skills, tracked in git
+  personas/       5 roles: lens, recommended skills, examples
   skills/         the live library, gitignored
   runs/           events.jsonl, meta.json, report.md for each run
-  tests/          93 tests: fake model, mock HTTP, local test site
+  tests/          141 tests: fake model, mock HTTP, local test site
   .env            keys, gitignored</pre>
   </footer>
 </div>

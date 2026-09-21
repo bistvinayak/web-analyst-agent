@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import config
 from .agent import AgentCancelled, AgentError, run_agent
+from .personas import get_persona
 from .skills import SkillStore
 
 
@@ -26,6 +27,7 @@ class Run:
     usage: dict = field(default_factory=dict)
     skills: list[str] = field(default_factory=list)  # skills the user chose; empty means the agent decides
     allow_writes: bool = True
+    persona: str = ""  # persona id, or empty for no particular perspective
     created: float = field(default_factory=time.time)
     events: list[dict] = field(default_factory=list)
     stop_event: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -48,7 +50,7 @@ class Run:
         return {
             "id": self.id, "url": self.url, "objective": self.objective, "status": self.status,
             "error": self.error, "usage": self.usage, "created": self.created,
-            "skills": self.skills, "allow_writes": self.allow_writes,
+            "skills": self.skills, "allow_writes": self.allow_writes, "persona": self.persona,
         }
 
 
@@ -60,12 +62,12 @@ class RunManager:
         self._runs: dict[str, Run] = {}
         self._lock = threading.Lock()
 
-    def start(self, url: str, objective: str, skills: list[str] | None = None, allow_writes: bool = True) -> Run:
+    def start(self, url: str, objective: str, skills: list[str] | None = None, allow_writes: bool = True, persona: str = "") -> Run:
         with self._lock:
             active = sum(1 for r in self._runs.values() if not r.finished)
             if active >= config.MAX_CONCURRENT_RUNS:
                 raise TooManyRuns(f"{active} runs are already in progress. Wait for one to finish.")
-            run = Run(id=secrets.token_urlsafe(8), url=url, objective=objective, skills=list(skills or []), allow_writes=allow_writes)
+            run = Run(id=secrets.token_urlsafe(8), url=url, objective=objective, skills=list(skills or []), allow_writes=allow_writes, persona=persona or "")
             self._runs[run.id] = run
         threading.Thread(target=self._execute, args=(run,), daemon=True).start()
         return run
@@ -77,6 +79,7 @@ class RunManager:
                 run.url, run.objective, run.emit, self.skills,
                 selected_skills=run.skills, allow_skill_writes=run.allow_writes,
                 should_stop=run.stop_event.is_set,
+                persona=get_persona(run.persona) if run.persona else None,
             )
             run.status = "done"
             run.emit("report", markdown=run.report)
@@ -123,7 +126,7 @@ class RunManager:
             meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
             run = Run(id=meta["id"], url=meta["url"], objective=meta["objective"], status=meta["status"],
                       error=meta.get("error", ""), usage=meta.get("usage", {}), created=meta["created"],
-                      skills=meta.get("skills", []), allow_writes=meta.get("allow_writes", True))
+                      skills=meta.get("skills", []), allow_writes=meta.get("allow_writes", True), persona=meta.get("persona", ""))
             if (d / "report.md").exists():
                 run.report = (d / "report.md").read_text(encoding="utf-8")
             run.events = [json.loads(line) for line in (d / "events.jsonl").read_text(encoding="utf-8").splitlines() if line]

@@ -1,0 +1,56 @@
+{
+  "id": "product-manager",
+  "order": 1,
+  "name": "Product Manager",
+  "tagline": "Positioning, users, activation, pricing and go-to-market.",
+  "lens": "You are advising a product manager. Frame findings around users, jobs to be done, value, activation, retention, monetization and go-to-market. Treat every recommendation as a hypothesis with a metric and a rough reach, impact, confidence and effort judgment. Separate evidence from inference, and finish with what to validate through research or analytics. Avoid implementation detail unless it changes a product decision. Write for a busy stakeholder and lead with the answer.",
+  "skills": [
+    "product-teardown",
+    "positioning-teardown",
+    "persona-and-jtbd-inference",
+    "competitor-feature-matrix",
+    "onboarding-and-signup-flow-review",
+    "go-to-market-analysis",
+    "changelog-and-roadmap-signals",
+    "experimentation-and-analytics-signals",
+    "feature-launch-teardown",
+    "customer-voice-synthesis",
+    "market-landscape-scan",
+    "swot-from-public-signals",
+    "prd-and-spec-review",
+    "pricing-page-teardown",
+    "competitor-comparison",
+    "company-research-brief",
+    "conversion-cro-audit",
+    "content-and-messaging-review",
+    "trust-and-credibility-review",
+    "navigation-and-ux-review",
+    "site-overview"
+  ],
+  "examples": [
+    {
+      "label": "Product teardown",
+      "url": "https://basecamp.com",
+      "objective": "Tear down this product like a product manager: who it is for, the job it does, how it makes money, and what you would change.",
+      "skills": [
+        "product-teardown"
+      ]
+    },
+    {
+      "label": "Positioning",
+      "url": "https://basecamp.com",
+      "objective": "Is this positioning clear? Assess it and write a sharper positioning statement.",
+      "skills": [
+        "positioning-teardown"
+      ]
+    },
+    {
+      "label": "Onboarding",
+      "url": "https://basecamp.com",
+      "objective": "Review the path from landing to first value and suggest three experiments to lift signups.",
+      "skills": [
+        "onboarding-and-signup-flow-review"
+      ]
+    }
+  ]
+}

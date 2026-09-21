@@ -16,6 +16,7 @@ Tests (no API key needed, the model is faked): `.venv/bin/python -m pytest`
 ## Using the web page
 
 - Paste a link and an objective, then click Analyze. The example chips fill both in for you.
+- **Perspective:** choose a role above the objective. It changes the example chips, the recommended skills, and how the report is framed.
 - **Skills:** leave it on "Let the agent choose", or switch to "Choose skills" and pick up to 5 from the categorized list (filter, preview, delete). Chosen skills go to the agent in full, which also saves model requests. Untick the box below to stop the agent from writing or changing skills during the run.
 - The run view shows the stage, each tool call with a readable result, elapsed time, models used, and token counts. Reports can be copied or downloaded as Markdown.
 - `/architecture` shows how the whole thing works, with diagrams. `?run=<id>` in the URL reopens a saved run.
@@ -38,16 +39,21 @@ cd scripts/a11y && npm install && RUN=<a saved run id> npm run audit
 
 Current result: 0 violations. It has not been tested with a real screen reader or with users yet. See `docs/product-brief.md` for the method and the before and after numbers.
 
-## Starter skills
+## Perspectives and skills
 
-19 skills ship in `seed_skills/` and are copied into `skills/` on startup if missing (never overwritten, so the agent's improvements to a skill are kept):
+Pick who is asking, and the report is written in that role's terms with that role's skills. A perspective is a JSON file in `personas/` (a lens, recommended skills, example objectives), so adding one is adding a file.
 
-- **Orientation:** `site-overview`, `company-research-brief`, `competitor-comparison`
-- **Search:** `seo-onpage-audit`, `technical-seo-crawlability`, `structured-data-audit`, `social-sharing-metadata`, `ai-search-readiness`, `link-health-check`
-- **Conversion and content:** `conversion-cro-audit`, `content-and-messaging-review`, `pricing-page-teardown`, `navigation-and-ux-review`, `trust-and-credibility-review`
-- **Technical and compliance:** `security-headers-review`, `privacy-and-tracking-review`, `accessibility-quick-audit`, `performance-signals-audit`, `tech-stack-detection`
+| Perspective | Focus | Skills built for it |
+|---|---|---|
+| Product Manager | positioning, users, activation, pricing, go-to-market | 13: `product-teardown`, `positioning-teardown`, `persona-and-jtbd-inference`, `competitor-feature-matrix`, `onboarding-and-signup-flow-review`, `go-to-market-analysis`, `changelog-and-roadmap-signals`, `experimentation-and-analytics-signals`, `feature-launch-teardown`, `customer-voice-synthesis`, `market-landscape-scan`, `swot-from-public-signals`, `prd-and-spec-review` |
+| SEO Analyst | crawlability, intent, content coverage | 4 new (`keyword-and-intent-mapping`, `internal-linking-audit`, `international-seo-hreflang-audit`, `content-and-topic-cluster-analysis`) plus the search skills |
+| Front End Engineer | semantic HTML, accessibility, responsiveness, performance, rendering | 4 new (`html-semantics-audit`, `responsive-design-review`, `asset-delivery-review`, `rendering-strategy-detection`) plus accessibility and performance |
+| Back End Engineer | HTTP behavior, APIs, caching, errors, reliability | 5 new (`api-surface-discovery`, `api-documentation-review`, `http-caching-and-headers-review`, `error-handling-and-status-code-review`, `reliability-and-status-signals`) |
+| AI Engineer | AI features, model stack, retrieval readiness, agents, safety | 5 new (`ai-feature-discovery`, `ai-stack-and-vendor-detection`, `rag-content-readiness-review`, `responsible-ai-disclosure-review`, `agent-and-mcp-readiness-review`) |
 
-Each one names the tools to call, the checks with severity, the report shape, and what it cannot see. When an objective fits none of them, the agent writes a new skill and saves it. Tests validate every seed (format, size, cross-references).
+50 skills ship in `seed_skills/` and are copied into `skills/` on startup if missing (never overwritten, so the agent's improvements to a skill are kept). Shared skills such as `site-overview`, `security-headers-review` and `tech-stack-detection` appear under several perspectives. When a perspective is chosen, the agent only sees that role's skills plus any it wrote itself, which keeps the prompt small on free models.
+
+Each skill names the tools to call, the checks with severity, the report shape, and what it cannot see. When an objective fits none of them, the agent writes a new skill and saves it. Tests validate every seed (format, size, cross-references) and that every skill belongs to a perspective.
 
 ## Model providers
 

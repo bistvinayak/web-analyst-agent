@@ -82,18 +82,21 @@ TOOLS = [
     {
         "name": "query_page",
         "description": (
-            "Run a CSS selector over a page already fetched with fetch_page and return matching text or "
-            "an attribute. Free: does not use the fetch budget. Example: selector 'a[href]' with attribute 'href'."
+            "Run CSS selectors over a page already fetched with fetch_page and return matching text or an "
+            "attribute. Free: does not use the fetch budget. Pass several selectors in ONE call with "
+            "'selectors' (up to 12) instead of calling this tool once per selector. Example: selectors "
+            "['main', 'nav a', 'img:not([alt])'], or one selector 'a[href]' with attribute 'href'."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "A URL previously passed to fetch_page."},
-                "selector": {"type": "string"},
-                "attribute": {"type": "string", "description": "Attribute to return instead of text, e.g. 'href'."},
-                "limit": {"type": "integer", "description": "Max results, default 30, max 100."},
+                "selector": {"type": "string", "description": "One CSS selector. Use 'selectors' for several."},
+                "selectors": {"type": "array", "items": {"type": "string"}, "description": "Up to 12 CSS selectors, answered together."},
+                "attribute": {"type": "string", "description": "Attribute to return instead of text, e.g. 'href'. Applies to every selector."},
+                "limit": {"type": "integer", "description": "Max results per selector. Default 30 for one selector, 8 for several."},
             },
-            "required": ["url", "selector"],
+            "required": ["url"],
         },
     },
 ]
@@ -151,7 +154,18 @@ def run_tool(ctx: ToolContext, name: str, args: dict) -> tuple[str, bool]:
             page = ctx.fetcher.cached(args["url"])
             if page is None:
                 return "That URL has not been fetched yet. Call fetch_page on it first.", True
-            result = query_page(page, args["selector"], args.get("attribute"), args.get("limit", 30))
+            selectors = args.get("selectors") or ([args["selector"]] if args.get("selector") else [])
+            if isinstance(selectors, str):  # models sometimes send "a, b, c"; a comma list is one valid CSS selector
+                selectors = [selectors]
+            if not selectors or not all(isinstance(x, str) and x.strip() for x in selectors):
+                return "Give 'selector' or a non-empty 'selectors' list of CSS selector strings.", True
+            if len(selectors) > 12:
+                return "At most 12 selectors per call. Split the list across two calls.", True
+            if len(selectors) == 1:
+                result = query_page(page, selectors[0], args.get("attribute"), args.get("limit", 30))
+            else:
+                per = max(1, min(int(args.get("limit") or 8), 30))
+                result = {"url": page.url, "results": [query_page(page, sel, args.get("attribute"), per) for sel in selectors]}
             return _json({"note": UNTRUSTED_NOTE, "results": result}), False
 
         return f"Unknown tool '{name}'.", True
