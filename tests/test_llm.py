@@ -137,12 +137,14 @@ def test_discover_free_models_filters_and_orders():
             m("big/one:free", ctx=900), m("small/one:free", ctx=100), m("paid/model", prompt="0.001"),
             m("no/tools:free", tools=False), m("inclusionai/ling-3.0-flash-fin:free", ctx=999), m("old/one:free", exp="2020-01-01")]
     http = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"data": data})))
-    assert discover_free_models(http) == ["inclusionai/ling-3.0-flash-vl:free", "nex-agi/nex-n2.5-pro:free", "big/one:free", "small/one:free"]
+    assert discover_free_models(http) == ["inclusionai/ling-3.0-flash-vl:free", "big/one:free", "small/one:free", "nex-agi/nex-n2.5-pro:free"]
 
 
 def test_discovery_failure_falls_back_to_seed_list():
     http = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500, text="no")))
-    assert discover_free_models(http)[0] == "inclusionai/ling-3.0-flash-vl:free"
+    seeds = discover_free_models(http)
+    assert seeds[0] == "poolside/laguna-s-2.1:free" and seeds[-1] == "openrouter/free"
+    assert len({m.split("/")[0] for m in seeds[:3]}) == 3          # first chain mixes vendors
 
 
 def test_more_than_three_models_make_a_second_chain(monkeypatch):

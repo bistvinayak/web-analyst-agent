@@ -1,0 +1,7 @@
+{
+  "name": "web-analyst-a11y-audit",
+  "private": true,
+  "description": "Automated accessibility audit of the Web Analyst UI (axe-core through Chrome)",
+  "scripts": { "audit": "node audit.js" },
+  "dependencies": { "axe-core": "^4.10.0", "puppeteer-core": "^24.0.0" }
+}

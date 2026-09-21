@@ -67,6 +67,16 @@ def get_run(run_id: str):
     return {**run.meta(), "report": run.report}
 
 
+@app.post("/api/runs/{run_id}/stop", status_code=202)
+def stop_run(run_id: str):
+    result = manager.stop(run_id)
+    if result is None:
+        raise HTTPException(404, "Run not found.")
+    if result is False:
+        raise HTTPException(409, "That run has already finished.")
+    return {"stopping": True}
+
+
 @app.get("/api/runs/{run_id}/events")
 async def run_events(run_id: str, request: Request):
     run = manager.get(run_id)

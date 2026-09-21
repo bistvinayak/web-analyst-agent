@@ -3,7 +3,7 @@ import copy
 import pytest
 
 from app import config
-from app.agent import AgentError, run_agent, trim_history
+from app.agent import AgentCancelled, AgentError, run_agent, trim_history
 from app.llm import Completion, LLMError, ToolCall
 from app.skills import SkillStore
 
@@ -170,3 +170,16 @@ def test_skill_writes_can_be_switched_off(site, local_ok, tmp_path):
     assert store.list() == []
     assert "turned off" in llm.calls[1]["messages"][-2]["content"]
     assert "Do not call save_skill" in llm.calls[0]["messages"][1]["content"]
+
+
+def test_stop_is_honored_between_steps(site, local_ok, tmp_path):
+    stop = {"now": False}
+    llm = FakeLLM([comp(calls=[call("t1", "fetch_page", url=site + "/")]), comp(text="never reached")])
+
+    def emit(t, **d):
+        if t == "tool_result":
+            stop["now"] = True        # the user presses Stop while the first tool runs
+
+    with pytest.raises(AgentCancelled):
+        run_agent(site + "/", "obj", emit, SkillStore(tmp_path), llm, should_stop=lambda: stop["now"])
+    assert len(llm.calls) == 1        # no second model request was made

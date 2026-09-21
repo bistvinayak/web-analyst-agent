@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config
-from .agent import AgentError, run_agent
+from .agent import AgentCancelled, AgentError, run_agent
 from .skills import SkillStore
 
 
@@ -20,7 +20,7 @@ class Run:
     id: str
     url: str
     objective: str
-    status: str = "running"  # running | done | error
+    status: str = "running"  # running | done | error | cancelled
     report: str = ""
     error: str = ""
     usage: dict = field(default_factory=dict)
@@ -28,6 +28,7 @@ class Run:
     allow_writes: bool = True
     created: float = field(default_factory=time.time)
     events: list[dict] = field(default_factory=list)
+    stop_event: threading.Event = field(default_factory=threading.Event, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @property
@@ -75,9 +76,13 @@ class RunManager:
             run.report, run.usage = run_agent(
                 run.url, run.objective, run.emit, self.skills,
                 selected_skills=run.skills, allow_skill_writes=run.allow_writes,
+                should_stop=run.stop_event.is_set,
             )
             run.status = "done"
             run.emit("report", markdown=run.report)
+        except AgentCancelled:
+            run.status = "cancelled"
+            run.emit("cancelled", message="Stopped at your request.")
         except AgentError as e:
             run.status, run.error = "error", str(e)
             run.emit("error", message=str(e))
@@ -87,6 +92,18 @@ class RunManager:
         finally:
             run.emit("done", status=run.status, usage=run.usage)
             self._persist(run)
+
+    def stop(self, run_id: str) -> "bool | None":
+        """Ask a run to stop after its current step. None: unknown run. False: already finished."""
+        with self._lock:
+            run = self._runs.get(run_id)
+        if run is None:
+            return None
+        if run.finished:
+            return False
+        run.stop_event.set()
+        run.emit("status", message="Stopping after the current step")
+        return True
 
     def _persist(self, run: Run) -> None:
         d = self.dir / run.id

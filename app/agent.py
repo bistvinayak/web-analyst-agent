@@ -28,6 +28,10 @@ class AgentError(Exception):
     pass
 
 
+class AgentCancelled(Exception):
+    """The user pressed Stop. Raised between steps, never in the middle of one."""
+
+
 def _preview(text: str, n: int = 300) -> str:
     text = " ".join(text.split())
     return text if len(text) <= n else text[:n] + "..."
@@ -99,6 +103,7 @@ def run_agent(
     llm: LLMClient | None = None,
     selected_skills: list[str] | None = None,
     allow_skill_writes: bool = True,
+    should_stop: Callable[[], bool] = lambda: False,
 ) -> tuple[str, dict]:
     """Run one analysis. Returns (report_markdown, usage). Raises AgentError on failure.
 
@@ -134,6 +139,8 @@ def run_agent(
 
     try:
         for turn in range(config.MAX_TURNS):
+            if should_stop():
+                raise AgentCancelled()
             last_turn = turn == config.MAX_TURNS - 1
             if last_turn:
                 messages.append({"role": "user", "content": WRAP_UP_NOTE})
@@ -198,6 +205,8 @@ def run_agent(
 
             messages.append(assistant)
             for tc in comp.tool_calls:
+                if should_stop():
+                    raise AgentCancelled()
                 emit("tool_call", id=tc.id, name=tc.name, input=_tool_call_summary(tc.name, tc.arguments))
                 if tc.parse_error:
                     content, is_error = f"Your arguments for {tc.name} were rejected: {tc.parse_error}. Call it again with a valid JSON object.", True

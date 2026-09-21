@@ -20,6 +20,24 @@ Tests (no API key needed, the model is faked): `.venv/bin/python -m pytest`
 - The run view shows the stage, each tool call with a readable result, elapsed time, models used, and token counts. Reports can be copied or downloaded as Markdown.
 - `/architecture` shows how the whole thing works, with diagrams. `?run=<id>` in the URL reopens a saved run.
 
+## Choosing models
+
+`scripts/rank_models.py` tests every free tool-capable OpenRouter model on this app's real workload (a correct tool call, then a report grounded in real fetched data) and writes the best six to `OPENROUTER_MODELS`. Chain 1 and chain 2 each mix vendors, and the `openrouter/free` router goes last as a safety net. Free models change often and one sample is noisy, so re-run it when quality drops:
+
+```bash
+.venv/bin/python scripts/rank_models.py --write-env
+```
+
+## Accessibility
+
+The UI is checked with axe-core through Chrome across 8 states (light, dark, skill picker, finished run, dialog, phone width). Run it against a running server:
+
+```bash
+cd scripts/a11y && npm install && RUN=<a saved run id> npm run audit
+```
+
+Current result: 0 violations. It has not been tested with a real screen reader or with users yet. See `docs/product-brief.md` for the method and the before and after numbers.
+
 ## Starter skills
 
 19 skills ship in `seed_skills/` and are copied into `skills/` on startup if missing (never overwritten, so the agent's improvements to a skill are kept):

@@ -27,7 +27,7 @@ def test_host_header_is_restricted(client):
 
 def test_run_lifecycle_and_sse(client, monkeypatch):
     seen = {}
-    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True):
+    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None):
         emit("text", text="hello")
         seen.update(selected=selected_skills, writes=allow_skill_writes)
         return "# Report", {"turns": 1}
@@ -76,3 +76,25 @@ def test_skills_list_has_categories(client):
 def test_architecture_page_served(client):
     r = client.get("/architecture")
     assert r.status_code == 200 and "Web Analyst Agent" in r.text
+
+
+def test_stop_run(client, monkeypatch):
+    import time
+    from app.agent import AgentCancelled
+
+    def slow_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None):
+        for _ in range(200):
+            if should_stop():
+                raise AgentCancelled()
+            time.sleep(0.02)
+        return "never", {}
+    monkeypatch.setattr("app.runs.run_agent", slow_run)
+
+    run_id = client.post("/api/runs", json={"url": "example.com", "objective": "look around"}).json()["id"]
+    assert client.post(f"/api/runs/{run_id}/stop").status_code == 202
+    with client.stream("GET", f"/api/runs/{run_id}/events") as r:
+        types = [json.loads(l[6:])["type"] for l in r.iter_lines() if l.startswith("data: ")]
+    assert "cancelled" in types and types[-1] == "done"
+    assert client.get(f"/api/runs/{run_id}").json()["status"] == "cancelled"
+    assert client.post(f"/api/runs/{run_id}/stop").status_code == 409     # already finished
+    assert client.post("/api/runs/nope/stop").status_code == 404

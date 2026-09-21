@@ -22,11 +22,15 @@ from . import config
 
 OPENROUTER_MAX_MODELS = 3
 MAX_WAIT_SECONDS = 20  # longer than this and we fail over instead of waiting
-# Used only if live discovery fails. These were the free tool-capable picks in Vidur.
+# Measured with scripts/rank_models.py (see README). Used first when models are auto-discovered,
+# and as the whole list if discovery fails. Vendors are mixed so one outage cannot sink a chain.
 SEED_FREE_MODELS = [
+    "poolside/laguna-s-2.1:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "inclusionai/ling-3.0-flash-vl:free",
-    "nex-agi/nex-n2.5-pro:free",
-    "nex-agi/nex-n2.5-mini:free",
+    "poolside/laguna-xs-2.1:free",
+    "dots-studio/dots-3-note-preview:free",
+    "openrouter/free",  # router: a different free model each request, so it stays last
 ]
 # Domain-specialised variants are poor general agents.
 _SKIP_MODEL_HINTS = ("-sante", "-fin")

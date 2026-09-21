@@ -5,3 +5,6 @@ runs/
 skills/*
 !skills/.gitkeep
 .env
+scripts/ranking.json
+scripts/a11y/node_modules/
+scripts/a11y/package-lock.json
