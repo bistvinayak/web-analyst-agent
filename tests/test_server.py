@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import server
+from app.agent import AgentError
 from app.runs import RunManager
 from app.skills import SkillStore
 
@@ -27,7 +28,7 @@ def test_host_header_is_restricted(client):
 
 def test_run_lifecycle_and_sse(client, monkeypatch):
     seen = {}
-    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None):
+    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None, run_id=None, tracer=None):
         emit("text", text="hello")
         seen.update(selected=selected_skills, writes=allow_skill_writes)
         return "# Report", {"turns": 1}
@@ -44,6 +45,37 @@ def test_run_lifecycle_and_sse(client, monkeypatch):
     assert client.get(f"/api/runs/{run_id}").json()["skills"] == ["my-skill"]
     assert client.get("/api/runs").json()[0]["id"] == run_id
     assert client.get("/api/runs/missing").status_code == 404
+    # Tracing is off in every test (no LANGFUSE_* env set): no trace event, no trace_url.
+    assert "trace" not in [e["type"] for e in events]
+    assert client.get(f"/api/runs/{run_id}").json()["trace_url"] == ""
+
+
+def test_trace_url_is_exposed_and_tracer_is_flushed_even_on_error(client, monkeypatch):
+    class FakeTracer:
+        def __init__(self):
+            self.flushed = 0
+
+        def trace_url(self, run_id):
+            return f"https://cloud.langfuse.com/trace/{run_id}"
+
+        def flush(self):
+            self.flushed += 1
+
+    tracer = FakeTracer()
+    monkeypatch.setattr("app.runs.get_tracer", lambda: tracer)
+
+    def failing_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None, run_id=None, tracer=None):
+        raise AgentError("boom")
+    monkeypatch.setattr("app.runs.run_agent", failing_run)
+
+    run_id = client.post("/api/runs", json={"url": "example.com", "objective": "look"}).json()["id"]
+    with client.stream("GET", f"/api/runs/{run_id}/events") as r:
+        events = [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
+    expected_url = f"https://cloud.langfuse.com/trace/{run_id}"
+    assert events[1] == {"seq": 1, "ts": events[1]["ts"], "type": "trace", "url": expected_url}
+    meta = client.get(f"/api/runs/{run_id}").json()
+    assert meta["trace_url"] == expected_url and meta["status"] == "error"
+    assert tracer.flushed == 1  # flushed exactly once, even though the run itself failed
 
 
 def test_skills_api(client):
@@ -82,7 +114,7 @@ def test_stop_run(client, monkeypatch):
     import time
     from app.agent import AgentCancelled
 
-    def slow_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None):
+    def slow_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None, run_id=None, tracer=None):
         for _ in range(200):
             if should_stop():
                 raise AgentCancelled()
@@ -109,7 +141,7 @@ def test_personas_api_hides_the_lens(client):
 def test_persona_is_validated_and_passed_to_the_agent(client, monkeypatch):
     seen = {}
 
-    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None):
+    def fake_run(url, objective, emit, skills, selected_skills=None, allow_skill_writes=True, should_stop=None, persona=None, run_id=None, tracer=None):
         seen["persona"] = persona.id if persona else None
         return "# Report", {}
     monkeypatch.setattr("app.runs.run_agent", fake_run)

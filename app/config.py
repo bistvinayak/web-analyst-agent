@@ -41,6 +41,13 @@ FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "90"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))  # per endpoint, for 429/5xx/network errors
 
+# --- Observability (optional) ---------------------------------------------
+# Set both keys to send a trace of every run (each model turn, each tool call) to Langfuse.
+# Leave either blank and tracing is skipped entirely, with no import of the langfuse package.
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
 SKILLS_DIR = Path(os.getenv("SKILLS_DIR", ROOT / "skills"))
 PERSONAS_DIR = Path(os.getenv("PERSONAS_DIR", ROOT / "personas"))
 SEED_SKILLS_DIR = ROOT / "seed_skills"  # shipped starter skills, copied into SKILLS_DIR if missing

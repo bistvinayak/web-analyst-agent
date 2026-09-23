@@ -362,6 +362,7 @@
             <tr><td>webfetch.py</td><td>The only outbound HTTP made for the agent, plus the HTML summarizer and the CSS selector query.</td><td class="dim">target websites</td></tr>
             <tr><td>prompts.py</td><td>The system prompt: workflow, how to write skills, analysis rules, report format.</td><td class="dim">agent.py</td></tr>
             <tr><td>config.py</td><td>Reads <code>.env</code> and holds every limit in one place.</td><td class="dim">everything</td></tr>
+            <tr><td>tracing.py</td><td>Optional Langfuse tracing: one span for the run, one generation per model turn, one tool span nested under each. A no-op unless <code>LANGFUSE_PUBLIC_KEY</code> and <code>LANGFUSE_SECRET_KEY</code> are set.</td><td class="dim">agent.py, runs.py</td></tr>
           </tbody>
         </table>
       </div>

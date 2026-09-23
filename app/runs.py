@@ -10,6 +10,7 @@ from . import config
 from .agent import AgentCancelled, AgentError, run_agent
 from .personas import get_persona
 from .skills import SkillStore
+from .tracing import get_tracer
 
 
 class TooManyRuns(Exception):
@@ -28,6 +29,7 @@ class Run:
     skills: list[str] = field(default_factory=list)  # skills the user chose; empty means the agent decides
     allow_writes: bool = True
     persona: str = ""  # persona id, or empty for no particular perspective
+    trace_url: str = ""  # Langfuse trace link, set as soon as the run starts if tracing is on
     created: float = field(default_factory=time.time)
     events: list[dict] = field(default_factory=list)
     stop_event: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -51,6 +53,7 @@ class Run:
             "id": self.id, "url": self.url, "objective": self.objective, "status": self.status,
             "error": self.error, "usage": self.usage, "created": self.created,
             "skills": self.skills, "allow_writes": self.allow_writes, "persona": self.persona,
+            "trace_url": self.trace_url,
         }
 
 
@@ -74,12 +77,17 @@ class RunManager:
 
     def _execute(self, run: Run) -> None:
         run.emit("status", message="Started")
+        tracer = get_tracer()
+        run.trace_url = tracer.trace_url(run.id)  # set even if the run later errors or is stopped
+        if run.trace_url:
+            run.emit("trace", url=run.trace_url)
         try:
             run.report, run.usage = run_agent(
                 run.url, run.objective, run.emit, self.skills,
                 selected_skills=run.skills, allow_skill_writes=run.allow_writes,
                 should_stop=run.stop_event.is_set,
                 persona=get_persona(run.persona) if run.persona else None,
+                run_id=run.id, tracer=tracer,
             )
             run.status = "done"
             run.emit("report", markdown=run.report)
@@ -93,6 +101,10 @@ class RunManager:
             run.status, run.error = "error", f"Unexpected error ({type(e).__name__})."
             run.emit("error", message=run.error)
         finally:
+            try:
+                tracer.flush()  # a Langfuse hiccup should never stop the run from finishing
+            except Exception:
+                pass
             run.emit("done", status=run.status, usage=run.usage)
             self._persist(run)
 
@@ -126,7 +138,8 @@ class RunManager:
             meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
             run = Run(id=meta["id"], url=meta["url"], objective=meta["objective"], status=meta["status"],
                       error=meta.get("error", ""), usage=meta.get("usage", {}), created=meta["created"],
-                      skills=meta.get("skills", []), allow_writes=meta.get("allow_writes", True), persona=meta.get("persona", ""))
+                      skills=meta.get("skills", []), allow_writes=meta.get("allow_writes", True), persona=meta.get("persona", ""),
+                      trace_url=meta.get("trace_url", ""))
             if (d / "report.md").exists():
                 run.report = (d / "report.md").read_text(encoding="utf-8")
             run.events = [json.loads(line) for line in (d / "events.jsonl").read_text(encoding="utf-8").splitlines() if line]

@@ -35,6 +35,10 @@
   }
 
   * { box-sizing: border-box; }
+  /* Without this, any element whose class sets `display` (grid, flex, ...) silently defeats
+     its own `hidden` attribute: author-origin CSS beats the browser's default [hidden] rule
+     even at equal specificity. Toggle visibility with el.hidden everywhere; this keeps it working. */
+  [hidden] { display: none !important; }
   html { font-size: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 1rem/1.55 var(--body); }
   .wrap { max-width: 74rem; margin: 0 auto; padding-inline: clamp(12px, 3vw, 20px); padding-block: 28px 72px; }
@@ -78,8 +82,9 @@
   button:disabled { opacity: .6; cursor: default; }
   button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; font-size: .95rem; padding: 10px 24px; min-height: 44px; }
   button.chip { font: 400 .8125rem var(--mono); padding: 4px 12px; border-radius: 99px; min-height: 32px; }
-  button.link { border: 0; background: none; color: var(--accent); padding: 4px 8px; font: 500 .8125rem var(--mono); min-height: 28px; }
-  button.link:hover:not(:disabled) { text-decoration: underline; }
+  button.link, a.link { border: 0; background: none; color: var(--accent); padding: 4px 8px; font: 500 .8125rem var(--mono); min-height: 28px; }
+  a.link { display: inline-flex; align-items: center; text-decoration: none; }
+  button.link:hover:not(:disabled), a.link:hover { text-decoration: underline; }
   button.danger { color: var(--warn); border-color: var(--warn); }
   button.stop { border-color: var(--warn); color: var(--warn); }
 
@@ -185,7 +190,8 @@
   .rail { position: sticky; top: 20px; display: grid; gap: 12px; min-width: 0; }
   @media (max-width: 900px) { .rail { position: static; } }
   ul.runs { list-style: none; margin: 8px 0 0; padding: 0; display: grid; }
-  ul.runs li { border-top: 1px solid var(--line); }
+  ul.runs li { border-top: 1px solid var(--line); padding-bottom: 4px; }
+  ul.runs li > a.link { display: block; padding: 0 2px 8px; }
   ul.runs li:first-child { border-top: 0; }
   ul.runs button { display: grid; gap: 3px; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; padding: 10px 2px; min-height: 44px; }
   ul.runs button:hover { background: var(--accent-soft); }
@@ -282,6 +288,7 @@
           <div class="run-title"><h2 class="label-sm" id="runTitle">Run</h2><span class="u" id="runUrl"></span><span class="o" id="runObj"></span></div>
           <div class="run-actions">
             <span class="pill" id="pill"><span class="dot" aria-hidden="true"></span><span id="pillText"></span></span>
+            <a href="#" id="traceLink" class="link" target="_blank" rel="noopener noreferrer" hidden>Observe in Langfuse<span class="sr-only"> (opens in a new tab)</span></a>
             <button type="button" class="stop" id="stop">Stop run</button>
           </div>
         </div>
@@ -600,9 +607,15 @@ function resetRun(run) {
   $("events").replaceChildren(); $("runErr").replaceChildren(); $("runFoot").textContent = ""; $("runChips").replaceChildren();
   $("runUrl").textContent = run.url || ""; $("runObj").textContent = run.objective || "";
   $("stop").hidden = false; $("stop").disabled = false;
+  $("traceLink").hidden = true; $("traceLink").removeAttribute("href");
+  if (run.trace_url) showTraceLink(run.trace_url);  // reopening a past run: no need to wait for the event
   setPill("running", "Running"); setStage(0);
   state.timer = setInterval(tick, 1000);
   renderRuns();
+}
+function showTraceLink(url) {
+  if (!url) return;
+  const a = $("traceLink"); a.href = url; a.hidden = false;
 }
 function row(kind, label, body) {
   const li = el("li", "row"); li.append(el("span", "kind " + kind, label)); const b = el("div"); b.append(...body); li.append(b); $("events").append(li); return li;
@@ -620,6 +633,8 @@ function addEvent(e) {
     row("skill", "Skills", [el("div", "what", "You chose: " + e.names.join(", "))]);
   } else if (t === "persona") {
     $("runChips").prepend(el("span", "tag skill", "Perspective: " + e.name));
+  } else if (t === "trace") {
+    showTraceLink(e.url);
   } else if (t === "llm") {
     row("", "Model", [el("div", "say", e.message)]);
   } else if (t === "thinking") {
@@ -733,7 +748,12 @@ async function renderRuns() {
     const pname = (state.personas.find((p) => p.id === r.persona) || {}).name;
     meta.append(pill, ...(pname ? [el("span", "", pname)] : []), el("span", "", ago(r.created)), ...(r.skills && r.skills.length ? [el("span", "", `${r.skills.length} skill${r.skills.length > 1 ? "s" : ""}`)] : []));
     b.append(el("span", "h", host(r.url)), meta, el("span", "ob", r.objective));
-    b.onclick = () => watch(r); li.append(b); ul.append(li);
+    b.onclick = () => watch(r); li.append(b);
+    if (r.trace_url) {
+      const trace = el("a", "link", "Observe in Langfuse"); trace.href = r.trace_url; trace.target = "_blank"; trace.rel = "noopener noreferrer";
+      trace.append(el("span", "sr-only", " (opens in a new tab)")); li.append(trace);
+    }
+    ul.append(li);
   }
 }
 

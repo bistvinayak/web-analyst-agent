@@ -66,6 +66,12 @@ Failover order: OpenRouter's own model chain, then retries with backoff on 429, 
 
 Free-tier caveat: OpenRouter limits free models per minute and per day (the daily cap is low unless your account has purchased credits). A run makes up to `MAX_TURNS` requests (15 by default), so a handful of runs can use up a day's quota. That is what the fallback is for.
 
+## Observability
+
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in `.env` (free account at [cloud.langfuse.com](https://cloud.langfuse.com), or point `LANGFUSE_HOST` at a self-hosted instance) and every run sends a trace: one span for the whole run, one generation per model turn with the exact prompt, model, token usage and finish reason, and one tool span nested under each turn for every `fetch_page`, `query_page` or skill call it made, with its input and result. This is how you watch the agent's actual reasoning thread, not just the summarized event log in the UI.
+
+While a run is going (and after it finishes), an **Observe in Langfuse** link appears next to it, in the run panel and in Recent runs. Leave either key blank and tracing is skipped entirely: no network call, no import of the `langfuse` package, no change in behavior. See `app/tracing.py`.
+
 ## How it works
 
 - `app/llm.py`: provider-neutral chat client with retries, failover, live free-model discovery, and cleanup of leaked `<think>` text.
@@ -73,6 +79,7 @@ Free-tier caveat: OpenRouter limits free models per minute and per day (the dail
 - `app/tools.py`: `load_skill`, `save_skill`, `fetch_page`, `fetch_raw`, `query_page`.
 - `app/skills.py`: one folder per skill with a `SKILL.md` (frontmatter plus a Markdown playbook). Overwrites bump a version and archive the old one in `.history/`.
 - `app/webfetch.py`: safe fetching and HTML summarizing.
+- `app/tracing.py`: optional Langfuse tracing, a no-op when unconfigured (see Observability above).
 - `app/runs.py`, `app/server.py`: background runs, a replayable event log, and a FastAPI server that streams progress over SSE. `app/static/index.html` is the UI.
 
 Skills are Markdown playbooks, not code. The agent does not execute anything it writes, so there is no sandbox to run.

@@ -1,5 +1,6 @@
 import json
 import copy
+from contextlib import contextmanager
 
 import pytest
 
@@ -36,6 +37,49 @@ class FakeLLM:
 def run(llm, tmp_path, url="https://x.test", events=None):
     events = events if events is not None else []
     return run_agent(url, "obj", lambda t, **d: events.append((t, d)), SkillStore(tmp_path), llm)
+
+
+class TracerSpan:
+    def __init__(self, kwargs):
+        self.kwargs = kwargs
+        self.updates = []
+
+    def update(self, **fields):
+        self.updates.append(fields)
+
+
+class FakeTracer:
+    """Records what run_agent asked to be traced. Exceptions raised inside its `with` blocks
+    propagate normally, same as NoopTracer and the real LangfuseTracer, so tests that pass this
+    in can still assert on AgentError/AgentCancelled reaching the caller."""
+
+    def __init__(self):
+        self.runs, self.generations, self.tools = [], [], []
+        self.flushed = 0
+
+    @contextmanager
+    def run(self, **kwargs):
+        span = TracerSpan(kwargs)
+        self.runs.append(span)
+        yield span
+
+    @contextmanager
+    def generation(self, **kwargs):
+        span = TracerSpan(kwargs)
+        self.generations.append(span)
+        yield span
+
+    @contextmanager
+    def tool(self, **kwargs):
+        span = TracerSpan(kwargs)
+        self.tools.append(span)
+        yield span
+
+    def trace_url(self, run_id):
+        return f"https://fake.trace/{run_id}"
+
+    def flush(self):
+        self.flushed += 1
 
 
 def test_full_run_creates_skill_fetches_and_reports(site, local_ok, tmp_path):
@@ -247,3 +291,81 @@ def test_selectors_sent_as_one_comma_separated_string_still_work(site, local_ok,
     run(llm, tmp_path, url)
     result = llm.calls[2]["messages"][-1]["content"]
     assert not result.startswith("Error:") and '"match_count"' in result
+
+
+# ---------------------------------------------------------------------------
+# Tracer wiring (app/tracing.py). run_agent defaults to NoopTracer via get_tracer(); these
+# tests pass in FakeTracer to check exactly what spans it opens and when it flushes (never:
+# that's owned by runs.py, which flushes once per run regardless of outcome).
+
+
+def test_tracer_wraps_the_run_each_turn_and_each_tool_call(site, local_ok, tmp_path):
+    tracer = FakeTracer()
+    llm = FakeLLM([comp(calls=[call("t1", "fetch_page", url=site + "/")]), comp(text="# Report")])
+    report, usage = run_agent(
+        site + "/", "obj", lambda *a, **k: None, SkillStore(tmp_path), llm, tracer=tracer, run_id="r1"
+    )
+    assert report == "# Report"
+    assert len(tracer.runs) == 1
+    root = tracer.runs[0]
+    assert root.kwargs == {"run_id": "r1", "url": site + "/", "objective": "obj", "persona": "", "skills": []}
+    assert root.updates and root.updates[-1]["output"] == "# Report"
+
+    assert len(tracer.generations) == usage["turns"] == 2
+    assert [g.kwargs["turn"] for g in tracer.generations] == [0, 1]
+    assert tracer.generations[0].updates[-1]["model"] == "model-a"
+    assert tracer.generations[0].updates[-1]["usage_details"] == {"input": 100, "output": 20}
+
+    assert len(tracer.tools) == 1
+    assert tracer.tools[0].kwargs == {"name": "fetch_page", "turn": 0}
+    assert tracer.tools[0].updates[-1]["level"] == "DEFAULT"
+    assert tracer.flushed == 0  # flushing is runs.py's job, not run_agent's
+
+
+def test_tracer_records_llm_error_and_still_propagates(tmp_path):
+    tracer = FakeTracer()
+    llm = FakeLLM([LLMError("boom")])
+    with pytest.raises(AgentError, match="boom"):
+        run_agent("https://x.test", "o", lambda *a, **k: None, SkillStore(tmp_path), llm, tracer=tracer, run_id="r2")
+    assert len(tracer.runs) == 1                                  # root span was still entered and exited
+    assert len(tracer.generations) == 1
+    assert tracer.generations[0].updates[-1]["level"] == "ERROR"
+    assert not tracer.runs[0].updates                             # no success output was ever recorded
+
+
+def test_tracer_failed_tool_call_is_marked_as_an_error(site, local_ok, tmp_path):
+    tracer = FakeTracer()
+    # The bad fetch fails without counting toward fetch_count, so the agent still has "no
+    # evidence" afterward and gets one nudge turn before a second, successful attempt.
+    llm = FakeLLM([
+        comp(calls=[call("t1", "fetch_page", url="file:///etc/passwd")]),
+        comp(calls=[call("t2", "fetch_page", url=site + "/")]),
+        comp(text="# Report"),
+    ])
+    run_agent(site + "/", "obj", lambda *a, **k: None, SkillStore(tmp_path), llm, tracer=tracer, run_id="r3")
+    assert tracer.tools[0].updates[-1]["level"] == "ERROR"
+    assert tracer.tools[1].updates[-1]["level"] == "DEFAULT"
+
+
+def test_tracer_run_receives_persona_and_selected_skills(site, local_ok, tmp_path):
+    from app.personas import get_persona
+
+    store = SkillStore(tmp_path)
+    store.install_seeds()
+    persona = get_persona("seo-analyst")
+    tracer = FakeTracer()
+    llm = FakeLLM([comp(calls=[call("t1", "fetch_page", url=site + "/")]), comp(text="# Report")])
+    run_agent(
+        site + "/", "obj", lambda *a, **k: None, store, llm,
+        selected_skills=["seo-onpage-audit"], persona=persona, tracer=tracer, run_id="r4",
+    )
+    assert tracer.runs[0].kwargs["persona"] == "seo-analyst"
+    assert tracer.runs[0].kwargs["skills"] == ["seo-onpage-audit"]
+
+
+def test_tracer_defaults_to_a_noop_when_not_passed(site, local_ok, tmp_path):
+    """No tracer given and no LANGFUSE_* env set (true for the whole test suite): run_agent
+    must behave exactly as before tracing was added, with no extra event or side effect."""
+    llm = FakeLLM([comp(calls=[call("t1", "fetch_page", url=site + "/")]), comp(text="# Report")])
+    report, _ = run_agent(site + "/", "obj", lambda *a, **k: None, SkillStore(tmp_path), llm)
+    assert report == "# Report"

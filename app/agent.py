@@ -1,4 +1,9 @@
-"""The agent loop: an LLM (via OpenRouter, with a fallback provider) plus the tools in tools.py."""
+"""The agent loop: an LLM (via OpenRouter, with a fallback provider) plus the tools in tools.py.
+
+Observability: every run is wrapped in a Langfuse trace when configured (see tracing.py), with
+one generation span per model turn and one tool span per tool call, nested under the turn that
+made the call. Tracing is optional and off by default; nothing here imports langfuse directly.
+"""
 import json
 import re
 from collections import Counter
@@ -9,6 +14,7 @@ from .llm import LLMClient, LLMError, build_endpoints
 from .prompts import SYSTEM_PROMPT, first_message
 from .skills import SkillError, SkillStore
 from .tools import TOOLS, ToolContext, run_tool
+from .tracing import Tracer, get_tracer
 from .webfetch import Fetcher
 
 Emit = Callable[..., None]
@@ -118,11 +124,14 @@ def run_agent(
     allow_skill_writes: bool = True,
     should_stop: Callable[[], bool] = lambda: False,
     persona=None,
+    run_id: str = "",
+    tracer: Tracer | None = None,
 ) -> tuple[str, dict]:
     """Run one analysis. Returns (report_markdown, usage). Raises AgentError on failure.
 
     selected_skills: skills the user picked. Their text is placed in the first message, which
     saves model requests. allow_skill_writes=False stops the agent from saving skills.
+    run_id identifies this run to the tracer (see tracing.py); leave empty outside a real run.
     """
     skills = skills or SkillStore()
     selected: list[tuple[str, str]] = []
@@ -131,119 +140,140 @@ def run_agent(
             selected.append((name, skills.load(name)))
         except SkillError as e:
             raise AgentError(str(e)) from e
-    try:
-        llm = llm or LLMClient(build_endpoints())
-    except LLMError as e:
-        raise AgentError(str(e)) from e
-    fetcher = Fetcher()
-    ctx = ToolContext(
-        skills=skills, fetcher=fetcher, allow_skill_writes=allow_skill_writes,
-        on_skill_saved=lambda info: emit("skill_saved", **info),
-    )
-    usage = {"input": 0, "output": 0, "turns": 0, "fetches": 0, "models": []}
-    messages: list[dict] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": first_message(
-            url, objective,
-            skills.catalog_text(only=set(persona.skills) if persona is not None else None),
-            selected, allow_skill_writes, persona,
-        )},
-    ]
-    if persona is not None:
-        emit("persona", id=persona.id, name=persona.name)
-    if selected:
-        emit("skills", names=[n for n, _ in selected], writes=allow_skill_writes)
-    seen_calls: Counter = Counter()
-    continuations = nudges = 0
-    last_served = None
+    tracer = tracer or get_tracer()
 
-    try:
-        # Two extra iterations exist only for the "reply was cut off" path after the forced final turn.
-        for turn in range(config.MAX_TURNS + 2):
-            if should_stop():
-                raise AgentCancelled()
-            last_turn = turn >= config.MAX_TURNS - 1
-            if turn == config.MAX_TURNS - 1:
-                messages.append({"role": "user", "content": WRAP_UP_NOTE})
-            elif turn == config.MAX_TURNS - 3 and config.MAX_TURNS > 4:
-                messages.append({"role": "user", "content": SOFT_WRAP_NOTE})
-            trim_history(messages)
+    with tracer.run(
+        run_id=run_id, url=url, objective=objective,
+        persona=persona.id if persona is not None else "",
+        skills=[n for n, _ in selected],
+    ) as root:
+        try:
+            llm = llm or LLMClient(build_endpoints())
+        except LLMError as e:
+            raise AgentError(str(e)) from e
+        fetcher = Fetcher()
+        ctx = ToolContext(
+            skills=skills, fetcher=fetcher, allow_skill_writes=allow_skill_writes,
+            on_skill_saved=lambda info: emit("skill_saved", **info),
+        )
+        usage = {"input": 0, "output": 0, "turns": 0, "fetches": 0, "models": []}
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": first_message(
+                url, objective,
+                skills.catalog_text(only=set(persona.skills) if persona is not None else None),
+                selected, allow_skill_writes, persona,
+            )},
+        ]
+        if persona is not None:
+            emit("persona", id=persona.id, name=persona.name)
+        if selected:
+            emit("skills", names=[n for n, _ in selected], writes=allow_skill_writes)
+        seen_calls: Counter = Counter()
+        continuations = nudges = 0
+        last_served = None
 
-            try:
-                comp = llm.chat(
-                    messages, TOOLS, config.MAX_TOKENS,
-                    tool_choice="none" if last_turn else "auto",
-                    on_notice=lambda msg: emit("llm", message=msg),
-                )
-            except LLMError as e:
-                raise AgentError(str(e)) from e
-
-            usage["turns"] += 1
-            usage["input"] += comp.usage["input"]
-            usage["output"] += comp.usage["output"]
-            served = (comp.provider, comp.model)
-            if served != last_served:
-                emit("llm", message=f"Using {comp.model} via {comp.provider}")
-                last_served = served
-                if comp.model not in usage["models"]:
-                    usage["models"].append(comp.model)
-
-            if comp.reasoning:
-                emit("thinking", text=comp.reasoning)
-            if comp.text and comp.tool_calls:  # a reply with no tool call is the report, sent as its own event
-                emit("text", text=comp.text)
-
-            assistant: dict = {"role": "assistant", "content": comp.text or None}
-            if comp.tool_calls and not last_turn:
-                assistant["tool_calls"] = [
-                    {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
-                    for tc in comp.tool_calls
-                ]
-
-            if comp.finish_reason == "length" and not comp.tool_calls:
-                if continuations >= 2:
-                    raise AgentError("The model kept hitting its output limit. Try a narrower objective or raise MAX_TOKENS.")
-                continuations += 1
-                messages += [assistant if comp.text else {"role": "assistant", "content": "..."},
-                             {"role": "user", "content": "Continue exactly where you left off."}]
-                continue
-
-            if not comp.tool_calls or last_turn:
-                if not comp.text:
-                    raise AgentError("The model returned an empty response. Try again, or configure a different model.")
-                if fetcher.fetch_count == 0 and not last_turn:
-                    if nudges >= 1:
-                        raise AgentError(
-                            "The model would not use its tools, so there is no evidence to report. "
-                            "Set OPENROUTER_MODELS to a model that supports tool calling, or check the fallback model."
-                        )
-                    nudges += 1
-                    messages += [assistant, {"role": "user", "content": NO_EVIDENCE_NOTE}]
-                    continue
-                report = clean_report(comp.text)
-                if len(report) > config.MAX_REPORT_CHARS:
-                    report = report[: config.MAX_REPORT_CHARS] + "\n\n[Report truncated: the model's output ran unusually long.]"
-                usage["fetches"] = fetcher.fetch_count
-                return report, usage
-
-            messages.append(assistant)
-            for tc in comp.tool_calls:
+        try:
+            # Two extra iterations exist only for the "reply was cut off" path after the forced final turn.
+            for turn in range(config.MAX_TURNS + 2):
                 if should_stop():
                     raise AgentCancelled()
-                emit("tool_call", id=tc.id, name=tc.name, input=_tool_call_summary(tc.name, tc.arguments))
-                if tc.parse_error:
-                    content, is_error = f"Your arguments for {tc.name} were rejected: {tc.parse_error}. Call it again with a valid JSON object.", True
-                else:
-                    key = (tc.name, json.dumps(tc.arguments, sort_keys=True))
-                    seen_calls[key] += 1
-                    if seen_calls[key] > 2:
-                        content, is_error = "You already made this exact call and have its result above. Use that instead of repeating it.", True
-                    else:
-                        content, is_error = run_tool(ctx, tc.name, tc.arguments)
-                emit("tool_result", id=tc.id, name=tc.name, ok=not is_error, preview=_result_summary(tc.name, content, is_error))
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": ("Error: " + content) if is_error else content})
+                last_turn = turn >= config.MAX_TURNS - 1
+                if turn == config.MAX_TURNS - 1:
+                    messages.append({"role": "user", "content": WRAP_UP_NOTE})
+                elif turn == config.MAX_TURNS - 3 and config.MAX_TURNS > 4:
+                    messages.append({"role": "user", "content": SOFT_WRAP_NOTE})
+                trim_history(messages)
 
-        raise AgentError("The agent hit its turn limit without producing a report.")
-    finally:
-        usage["fetches"] = fetcher.fetch_count
-        fetcher.close()
+                with tracer.generation(turn=turn) as gen:
+                    gen.update(input=messages, metadata={"tool_choice": "none" if last_turn else "auto"})
+                    try:
+                        comp = llm.chat(
+                            messages, TOOLS, config.MAX_TOKENS,
+                            tool_choice="none" if last_turn else "auto",
+                            on_notice=lambda msg: emit("llm", message=msg),
+                        )
+                    except LLMError as e:
+                        gen.update(level="ERROR", status_message=str(e))
+                        raise AgentError(str(e)) from e
+
+                    usage["turns"] += 1
+                    usage["input"] += comp.usage["input"]
+                    usage["output"] += comp.usage["output"]
+                    served = (comp.provider, comp.model)
+                    if served != last_served:
+                        emit("llm", message=f"Using {comp.model} via {comp.provider}")
+                        last_served = served
+                        if comp.model not in usage["models"]:
+                            usage["models"].append(comp.model)
+
+                    gen.update(
+                        output=comp.text or [{"tool_call": tc.name, "arguments": tc.arguments} for tc in comp.tool_calls],
+                        model=comp.model,
+                        usage_details={"input": comp.usage["input"], "output": comp.usage["output"]},
+                        metadata={"provider": comp.provider, "finish_reason": comp.finish_reason},
+                    )
+
+                    if comp.reasoning:
+                        emit("thinking", text=comp.reasoning)
+                    if comp.text and comp.tool_calls:  # a reply with no tool call is the report, sent as its own event
+                        emit("text", text=comp.text)
+
+                    assistant: dict = {"role": "assistant", "content": comp.text or None}
+                    if comp.tool_calls and not last_turn:
+                        assistant["tool_calls"] = [
+                            {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                            for tc in comp.tool_calls
+                        ]
+
+                    if comp.finish_reason == "length" and not comp.tool_calls:
+                        if continuations >= 2:
+                            raise AgentError("The model kept hitting its output limit. Try a narrower objective or raise MAX_TOKENS.")
+                        continuations += 1
+                        messages += [assistant if comp.text else {"role": "assistant", "content": "..."},
+                                     {"role": "user", "content": "Continue exactly where you left off."}]
+                        continue
+
+                    if not comp.tool_calls or last_turn:
+                        if not comp.text:
+                            raise AgentError("The model returned an empty response. Try again, or configure a different model.")
+                        if fetcher.fetch_count == 0 and not last_turn:
+                            if nudges >= 1:
+                                raise AgentError(
+                                    "The model would not use its tools, so there is no evidence to report. "
+                                    "Set OPENROUTER_MODELS to a model that supports tool calling, or check the fallback model."
+                                )
+                            nudges += 1
+                            messages += [assistant, {"role": "user", "content": NO_EVIDENCE_NOTE}]
+                            continue
+                        report = clean_report(comp.text)
+                        if len(report) > config.MAX_REPORT_CHARS:
+                            report = report[: config.MAX_REPORT_CHARS] + "\n\n[Report truncated: the model's output ran unusually long.]"
+                        usage["fetches"] = fetcher.fetch_count
+                        root.update(output=report, metadata={"usage": usage})
+                        return report, usage
+
+                    messages.append(assistant)
+                    for tc in comp.tool_calls:
+                        if should_stop():
+                            raise AgentCancelled()
+                        emit("tool_call", id=tc.id, name=tc.name, input=_tool_call_summary(tc.name, tc.arguments))
+                        with tracer.tool(name=tc.name, turn=turn) as tspan:
+                            tspan.update(input=tc.arguments)
+                            if tc.parse_error:
+                                content, is_error = f"Your arguments for {tc.name} were rejected: {tc.parse_error}. Call it again with a valid JSON object.", True
+                            else:
+                                key = (tc.name, json.dumps(tc.arguments, sort_keys=True))
+                                seen_calls[key] += 1
+                                if seen_calls[key] > 2:
+                                    content, is_error = "You already made this exact call and have its result above. Use that instead of repeating it.", True
+                                else:
+                                    content, is_error = run_tool(ctx, tc.name, tc.arguments)
+                            tspan.update(output=content, level="ERROR" if is_error else "DEFAULT")
+                        emit("tool_result", id=tc.id, name=tc.name, ok=not is_error, preview=_result_summary(tc.name, content, is_error))
+                        messages.append({"role": "tool", "tool_call_id": tc.id, "content": ("Error: " + content) if is_error else content})
+
+            raise AgentError("The agent hit its turn limit without producing a report.")
+        finally:
+            usage["fetches"] = fetcher.fetch_count
+            fetcher.close()
